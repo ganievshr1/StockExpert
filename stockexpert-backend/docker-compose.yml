@@ -1,0 +1,109 @@
+x-app: &app
+  build: .
+  env_file: ${STOCKEXPERT_ENV_FILE:-.env}
+  environment:
+    DATABASE_URL: postgresql+psycopg://stockexpert:${POSTGRES_PASSWORD:?run init_env}@postgres:5432/stockexpert
+    REDIS_URL: redis://redis:6379/0
+    OLLAMA_URL: http://ollama:11434
+    MINIO_ENDPOINT: minio:9000
+    QDRANT_URL: http://qdrant:6333
+  restart: unless-stopped
+services:
+  postgres:
+    image: postgres:16.8-alpine
+    environment:
+      POSTGRES_DB: stockexpert
+      POSTGRES_USER: stockexpert
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?run init_env}
+    volumes: [postgres_data:/var/lib/postgresql/data]
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U stockexpert -d stockexpert']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+  redis:
+    image: redis:7.2.8-alpine
+    command: [redis-server, --appendonly, 'yes', --maxmemory-policy, noeviction]
+    volumes: [redis_data:/data]
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+  minio:
+    build:
+      context: ./docker/minio
+    image: stockexpert-minio:2025-10-15
+    pull_policy: build
+    command: server /data --console-address ':9001'
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY}
+    ports: ['127.0.0.1:9001:9001']
+    volumes: [minio_data:/data]
+    restart: unless-stopped
+  qdrant:
+    image: qdrant/qdrant:v1.14.1
+    volumes: [qdrant_data:/qdrant/storage]
+    restart: unless-stopped
+  ollama:  
+    image: ${OLLAMA_IMAGE:-ollama/ollama:0.9.0}
+    environment:
+      OLLAMA_NUM_PARALLEL: '1'
+      OLLAMA_MAX_LOADED_MODELS: '1'
+      OLLAMA_CONTEXT_LENGTH: ${OLLAMA_LLM_NUM_CTX:-8192}
+    volumes:
+      - ollama_data:/root/.ollama
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    restart: unless-stopped
+  migrate:
+    <<: *app
+    restart: 'no'
+    command: [sh, -c, 'alembic upgrade head && python -m app.seed']
+    depends_on:
+      postgres: {condition: service_healthy}
+  backend:
+    <<: *app
+    ports: ['127.0.0.1:8000:8000']
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/live')"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+  worker:
+    <<: *app
+    command: [celery, -A, app.tasks:celery_app, worker, --loglevel=INFO, --concurrency=1, --pool=solo, -Q, 'normalize_mtr,vector_match,gen_justification']
+    volumes: [model_cache:/models/huggingface]
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+      redis: {condition: service_healthy}
+      minio: {condition: service_started}
+      qdrant: {condition: service_started}
+      ollama: {condition: service_started}
+  beat:
+    <<: *app
+    command: [celery, -A, app.tasks:celery_app, beat, --loglevel=INFO, --schedule=/tmp/celerybeat-schedule]
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+      redis: {condition: service_healthy}
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:
+  qdrant_data:
+  ollama_data:
+  model_cache:
+
+networks:
+  default:
+    name: stockexpert-network

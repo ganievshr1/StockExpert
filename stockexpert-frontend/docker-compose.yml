@@ -1,0 +1,12 @@
+name: stockexpert-frontend
+services:
+  frontend:
+    build: .
+    ports: ['127.0.0.1:5173:80']
+    restart: unless-stopped
+    networks: [stockexpert]
+networks:
+  stockexpert:
+    external: true
+    name: stockexpert-network
+
