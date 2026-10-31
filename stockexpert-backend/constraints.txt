@@ -1,0 +1,4 @@
+# Compatible dependency bounds for StockExpert 3.7.
+numpy>=1.26,<3
+pydantic>=2.11,<3
+httpx>=0.28,<0.29
