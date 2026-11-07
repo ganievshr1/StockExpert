@@ -1,0 +1,39 @@
+{
+  "from_release": "3.9.13-b1",
+  "to_release": "3.9.13-b1.1",
+  "date": "2026-11-07",
+  "database_migrations": false,
+  "patch_extract_directory": "/home/ganie/StockExpertB1",
+  "preserves": [
+    ".env",
+    "b1-local.sh",
+    "Docker volumes",
+    "sessions",
+    "loaded models"
+  ],
+  "files": [
+    "MANIFEST_B1.sha256",
+    "README_B1.md",
+    "docs/B1_POSITIONS_VALIDATION.json",
+    "docs/B1_QUICKSTART_RU.md",
+    "docs/B1_REQUIREMENT_LINES_RU.md",
+    "docs/CHANGESET_B1_POSITIONS.json",
+    "fixtures/B1_thermocolumn_10.txt",
+    "fixtures/README.md",
+    "stockexpert-backend/MANIFEST.sha256",
+    "stockexpert-backend/app/api/routes.py",
+    "stockexpert-backend/app/main.py",
+    "stockexpert-backend/app/services/requirement_extraction.py",
+    "stockexpert-backend/app/services/workflow.py",
+    "stockexpert-backend/tests/test_requirement_lines.py",
+    "stockexpert-frontend/MANIFEST.sha256",
+    "stockexpert-frontend/package-lock.json",
+    "stockexpert-frontend/package.json",
+    "stockexpert-frontend/src/components/NormalizationPicker.tsx",
+    "stockexpert-frontend/src/features/session/DocumentCard.tsx",
+    "stockexpert-frontend/src/services/api.ts",
+    "stockexpert-frontend/tests/requirement-upload-api.test.ts",
+    "stockexpert-frontend/tests/requirement-upload.test.tsx",
+    "validation/b1_positions/backend_full.xml"
+  ]
+}

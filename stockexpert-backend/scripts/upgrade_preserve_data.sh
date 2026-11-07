@@ -46,7 +46,7 @@ if [[ "$active_jobs" != "0" || "$regex_jobs" != "0" || "$lab_jobs" != "0" ]]; th
   echo 'Во время проверки начался новый расчёт. Прежние сервисы возобновлены; дождитесь завершения и повторите обновление.' >&2
   exit 1
 fi
-"${compose[@]}" stop worker worker-regex
+"${compose[@]}" stop worker worker-batch worker-control worker-laboratory worker-regex
 backup_dir="../stockexpert-backup-$(date +%Y%m%d-%H%M%S)"
 mkdir "$backup_dir"
 cp .env "$backup_dir/backend.env"
@@ -68,12 +68,12 @@ history_sql="SELECT json_build_object('sessions',(SELECT count(*) FROM procureme
 history_before=$("${compose[@]}" exec -T postgres psql -U stockexpert -d stockexpert -tAc "$history_sql")
 printf '%s\n' "$history_before" > "$backup_dir/history-counts-before.json"
 echo "Резервная копия базы и .env: $backup_dir. Храните её приватно."
-"${compose[@]}" build backend worker worker-regex beat migrate
+"${compose[@]}" build backend worker worker-batch worker-control worker-laboratory worker-regex beat migrate
 # Explicit one-off migration avoids reusing an old completed migrate container.
 "${compose[@]}" run --rm --no-deps migrate
 history_after=$("${compose[@]}" exec -T postgres psql -U stockexpert -d stockexpert -tAc "$history_sql")
 [[ "$history_before" == "$history_after" ]] || { echo 'Контроль количества исторических записей не пройден. Сервисы оставлены остановленными; сохранена резервная копия.' >&2; exit 1; }
 "${compose[@]}" up -d --no-deps --wait redis
-"${compose[@]}" up -d --no-deps backend worker worker-regex beat
+"${compose[@]}" up -d --no-deps backend worker worker-batch worker-control worker-laboratory worker-regex beat
 "${compose[@]}" ps
 echo 'Обновление бэкэнда завершено. Тома, модели, пароли и прежние расчёты сохранены. CPU-очередь регулярных выражений запущена.'

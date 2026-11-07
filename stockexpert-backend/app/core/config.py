@@ -13,6 +13,11 @@ class Settings(BaseSettings):
     DB_USER: str = 'stockexpert'
     POSTGRES_PASSWORD: SecretStr = SecretStr('')
     REDIS_URL: str = 'redis://redis:6379/0'
+    # Fixed by the deployment, never by a request or experimental job payload.
+    JOB_ROUTING_MODE: Literal['shared', 'split'] = 'shared'
+    DISPATCH_INTERVAL_SECONDS: float = Field(default=1.0, ge=0.1, le=60)
+    B1_ARTIFACT_DIR: str = '/data/b1'
+    B1_API_BASE_URL: str = 'http://backend:8000/api/v1'
     MINIO_ENDPOINT: str = 'minio:9000'
     MINIO_ACCESS_KEY: str = 'stockexpert'
     MINIO_SECRET_KEY: str

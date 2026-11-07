@@ -5,6 +5,14 @@ from app.services import llm
 from app.services.contracts import Requirements
 
 
+def split_lines(text):
+    """An explicitly selected TXT list: one complete position per nonempty line."""
+    parts = [line.strip() for line in text.splitlines() if line.strip()]
+    if not parts:
+        raise ValueError("The requirement list has no nonempty positions")
+    return parts
+
+
 def split(text):
     payload = {"text": text}
     for attempt in range(1, settings.NORMALIZATION_MAX_ATTEMPTS + 1):

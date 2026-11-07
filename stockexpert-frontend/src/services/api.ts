@@ -89,6 +89,7 @@ export interface SessionDeletionResult {
     detail: string;
   }[];
 }
+export type RequirementMode = "auto" | "lines";
 export const api = {
   deleteSession: (sid: string) =>
     request<{ deleted: boolean; session_id: string }>(
@@ -97,9 +98,16 @@ export const api = {
     ),
   deleteAllSessions: () =>
     request<SessionDeletionResult>("/procurement/sessions", json("DELETE")),
-  replaceDocument: (sid: string, did: string, file: File) => {
+  replaceDocument: (
+    sid: string,
+    did: string,
+    file: File,
+    requirementMode?: RequirementMode,
+  ) => {
     const body = new FormData();
     body.append("file", file);
+    if (requirementMode !== undefined)
+      body.append("requirement_mode", requirementMode);
     return request<DocumentRecord>(
       sessionPath(sid) + "/documents/" + did + "/replace",
       { method: "POST", body },
@@ -137,7 +145,11 @@ export const api = {
     request<ProcurementSession[]>(
       `/procurement/sessions?limit=50&offset=${offset}`,
     ),
-  selectTaxonomy: (sid: string, enabled: boolean) => request<ProcurementSession>(`/procurement/sessions/${sid}/taxonomy-mode`, json("PUT", {taxonomy_enabled: enabled})),
+  selectTaxonomy: (sid: string, enabled: boolean) =>
+    request<ProcurementSession>(
+      `/procurement/sessions/${sid}/taxonomy-mode`,
+      json("PUT", { taxonomy_enabled: enabled }),
+    ),
   bases: (offset = 0) =>
     request<NormalizedBase[]>(`/normalized-bases?limit=100&offset=${offset}`),
   create: (
@@ -162,9 +174,16 @@ export const api = {
     request<DocumentRecord[]>(sessionPath(sid) + "/documents"),
   metrics: (sid: string) => request<Metrics>(sessionPath(sid) + "/metrics"),
   status: (sid: string) => request<JobStatus>(`/matching/${sid}/status`),
-  upload: (sid: string, kind: "residuals" | "requirement", file: File) => {
+  upload: (
+    sid: string,
+    kind: "residuals" | "requirement",
+    file: File,
+    requirementMode?: RequirementMode,
+  ) => {
     const body = new FormData();
     body.append("file", file);
+    if (kind === "requirement" && requirementMode !== undefined)
+      body.append("requirement_mode", requirementMode);
     return request<DocumentRecord>(sessionPath(sid) + `/upload-${kind}`, {
       method: "POST",
       body,

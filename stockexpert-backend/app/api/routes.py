@@ -1,7 +1,7 @@
 import asyncio, csv, hashlib, io, json, uuid
 from pathlib import Path
 from typing import Literal
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query, Request
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.responses import StreamingResponse, Response
 from pydantic import BaseModel, Field, ConfigDict
@@ -24,9 +24,9 @@ from app.api.deps import get_current_user, require_editor, require_expert, own_s
 from app.core.config import settings
 from app.core.security import verify_password, create_access_token
 from app.services import storage, taxonomy as taxonomy_service
-from app.services import model_registry, normalization_engine
+from app.services import model_registry, normalization_engine, requirement_extraction
 from app.services.llm import LLMError
-from app.services.inventory import available_item_ids, stock_state
+from app.services.inventory import available_item_ids, stock_state, lock_stock_origins
 from app.services.parsing import sheets, document_text
 from app.services.contracts import SchemaDraft
 from app.services.workflow import validate_mapping
@@ -108,6 +108,7 @@ def no_active(db, sid):
 
 def enqueue(db, s, user, kind, params=None):
     require_editor(user)
+    lock_stock_origins(db, s)
     no_active(db, s.id)
     from app.services.run_history import capture_latest
     capture_latest(db, s)
@@ -432,8 +433,13 @@ def select_model(
     return session_public(db, s)
 
 
-def upload(sid, file, kind, db, user, replace_id=None):
+def upload(sid, file, kind, db, user, replace_id=None, requirement_mode="auto"):
     require_editor(user)
+    name = Path(file.filename or "").name
+    if requirement_mode not in {"auto", "lines"}:
+        raise HTTPException(422, "Unknown requirement parsing mode")
+    if requirement_mode == "lines" and (kind != "requirement" or Path(name).suffix.lower() != ".txt"):
+        raise HTTPException(422, "The one-position-per-line mode requires a TXT requirement file")
     s = own_session(db, sid, user, lock=True)
     no_active(db, sid)
     reuse_requirement = (
@@ -454,7 +460,6 @@ def upload(sid, file, kind, db, user, replace_id=None):
             raise HTTPException(
                 409, "Source replacement is only available before processing starts"
             )
-    name = Path(file.filename or "").name
     allowed = {".xlsx"} if kind == "residual" else {".xlsx", ".pdf", ".docx", ".txt"}
     if Path(name).suffix.lower() not in allowed:
         raise HTTPException(415, "Unsupported file type")
@@ -473,7 +478,9 @@ def upload(sid, file, kind, db, user, replace_id=None):
                 ]
             }
         else:
-            meta = {"text": document_text(data, name)}
+            meta = {"text": document_text(data, name), "requirement_mode": requirement_mode}
+            if requirement_mode == "lines":
+                meta["requirement_positions"] = len(requirement_extraction.split_lines(meta["text"]))
         meta["size_bytes"] = len(data)
     except Exception as exc:
         raise HTTPException(422, f"Cannot parse file: {exc}")
@@ -486,6 +493,20 @@ def upload(sid, file, kind, db, user, replace_id=None):
     if old:
         if replaced and old.id != replaced.id:
             raise HTTPException(409, "This file already exists in the session")
+        if kind == "requirement" and (old.meta or {}).get("requirement_mode", "auto") != requirement_mode:
+            if not replaced:
+                raise HTTPException(409, "This file already uses another parsing mode. Replace the document to change its mode.")
+            # An explicit replacement may change only the interpretation of the
+            # same bytes. The existing blob remains valid; no duplicate upload.
+            db.execute(delete(Item).where(Item.document_id == old.id))
+            previous_mode = (old.meta or {}).get("requirement_mode", "auto")
+            old.meta = meta
+            s.status = "UPLOADED"
+            record(db, sid, "DOCUMENT_REPLACED", {
+                "previous_document_id": old.id, "document_id": old.id,
+                "previous_requirement_mode": previous_mode, "requirement_mode": requirement_mode,
+            }, user.id)
+            db.commit()
         return public(old)
     key = f"{user.organization_id}/{sid}/{uuid.uuid4()}{Path(name).suffix.lower()}"
     storage.put(key, data)
@@ -544,6 +565,7 @@ def replace_document(
     sid: str,
     did: str,
     file: UploadFile = File(...),
+    requirement_mode: Literal["auto", "lines"] = Form("auto"),
     db=Depends(get_db),
     user=Depends(get_current_user),
 ):
@@ -551,7 +573,7 @@ def replace_document(
     document = db.get(Document, did)
     if not document or document.session_id != sid:
         raise HTTPException(404, "Document not found")
-    return upload(sid, file, document.kind, db, user, replace_id=did)
+    return upload(sid, file, document.kind, db, user, replace_id=did, requirement_mode=requirement_mode)
 
 
 @router.post("/procurement/sessions/{sid}/upload-residuals", status_code=201)
@@ -568,10 +590,11 @@ def upload_residuals(
 def upload_requirement(
     sid: str,
     file: UploadFile = File(...),
+    requirement_mode: Literal["auto", "lines"] = Form("auto"),
     db=Depends(get_db),
     user=Depends(get_current_user),
 ):
-    return upload(sid, file, "requirement", db, user)
+    return upload(sid, file, "requirement", db, user, requirement_mode=requirement_mode)
 
 
 @router.get("/procurement/sessions/{sid}/documents")
@@ -863,6 +886,7 @@ def status(sid: str, db=Depends(get_db), user=Depends(get_current_user)):
 def retry_job(sid: str, jid: str, db=Depends(get_db), user=Depends(get_current_user)):
     require_editor(user)
     s = own_session(db, sid, user, lock=True)
+    lock_stock_origins(db, s)
     no_active(db, sid)
     job = db.get(Job, jid)
     if not job or job.session_id != sid:

@@ -1,7 +1,7 @@
 import { ScrollArea } from "../../components/ScrollArea";
-import { useState, type DragEvent } from "react";
+import { useEffect, useState, type DragEvent } from "react";
 import { useWorkspace } from "../../state/Workspace";
-import { api } from "../../services/api";
+import { api, type RequirementMode } from "../../services/api";
 import type { DocumentRecord } from "../../types";
 import { Icon } from "../../components/Icon";
 import { Modal } from "../../components/ui";
@@ -11,6 +11,15 @@ type SheetPreview = {
   rows: number;
   preview: { row_index: number; cells: Record<string, string> }[];
 };
+function readText(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () =>
+      reject(new Error(`Не удалось прочитать ${file.name}`));
+    reader.readAsText(file);
+  });
+}
 export function DocumentPreview({
   document,
   onClose,
@@ -78,7 +87,12 @@ export function DocumentPreview({
 }
 export function DocumentCard({ kind }: { kind: "residuals" | "requirement" }) {
   const w = useWorkspace();
-  const [file, setFile] = useState<File | null>(null),
+  const [files, setFiles] = useState<File[]>([]),
+    [requirementMode, setRequirementMode] = useState<RequirementMode>("auto"),
+    [positionPreview, setPositionPreview] = useState<{
+      count: number;
+      error?: string;
+    } | null>(null),
     [preview, setPreview] = useState<DocumentRecord | null>(null),
     [replace, setReplace] = useState<string | undefined>(),
     [dragging, setDragging] = useState(false),
@@ -97,18 +111,107 @@ export function DocumentCard({ kind }: { kind: "residuals" | "requirement" }) {
     !w.canEdit ||
     (!!w.data?.session.schema_doc.mappings &&
       !(reusable && isRequirement && w.data?.job.status === "NOT_STARTED"));
+  useEffect(() => {
+    setFiles([]);
+    setReplace(undefined);
+    setRequirementMode("auto");
+    setInputKey((value) => value + 1);
+  }, [w.sid]);
+  useEffect(() => {
+    let current = true;
+    setPositionPreview(null);
+    if (!isRequirement || requirementMode !== "lines" || !files.length) return;
+    if (files.some((file) => !file.name.toLowerCase().endsWith(".txt"))) {
+      setPositionPreview({
+        count: 0,
+        error: "Для списка позиций выберите только TXT-файлы.",
+      });
+      return;
+    }
+    if (files.some((file) => file.size > 20 * 1024 * 1024)) {
+      setPositionPreview({
+        count: 0,
+        error: "Размер каждого файла должен быть не более 20 МБ.",
+      });
+      return;
+    }
+    void Promise.all(files.map(readText))
+      .then((texts) => {
+        if (!current) return;
+        const counts = texts.map(
+          (text) =>
+            text.split(/\r\n|\r|\n/).filter((line) => line.trim()).length,
+        );
+        setPositionPreview({
+          count: counts.reduce((total, count) => total + count, 0),
+          ...(counts.some((count) => count === 0)
+            ? { error: "В одном из выбранных файлов нет непустых строк." }
+            : {}),
+        });
+      })
+      .catch((error) => {
+        if (current)
+          setPositionPreview({ count: 0, error: (error as Error).message });
+      });
+    return () => {
+      current = false;
+    };
+  }, [files, isRequirement, requirementMode]);
+  function selectFiles(next: File[]) {
+    setFiles(isRequirement && !replace ? next : next.slice(0, 1));
+  }
   function drop(event: DragEvent) {
     event.preventDefault();
     setDragging(false);
-    if (!locked) setFile(event.dataTransfer.files[0] || null);
+    if (!locked) selectFiles(Array.from(event.dataTransfer.files));
   }
   async function upload() {
-    if (!file) return;
-    if (file.size > 20 * 1024 * 1024)
-      throw Error("Размер файла превышает 20 МБ");
-    if (replace) await api.replaceDocument(w.sid, replace, file);
-    else await api.upload(w.sid, kind, file);
-    setFile(null);
+    if (!files.length || locked) return;
+    const selected = [...files];
+    for (const file of selected) {
+      if (file.size > 20 * 1024 * 1024)
+        throw Error(`${file.name}: размер файла превышает 20 МБ`);
+      if (
+        isRequirement &&
+        requirementMode === "lines" &&
+        !file.name.toLowerCase().endsWith(".txt")
+      )
+        throw Error("Для списка позиций выберите только TXT-файлы.");
+    }
+    let completed = 0;
+    try {
+      for (const file of selected) {
+        if (replace)
+          await api.replaceDocument(
+            w.sid,
+            replace,
+            file,
+            isRequirement ? requirementMode : undefined,
+          );
+        else
+          await api.upload(
+            w.sid,
+            kind,
+            file,
+            isRequirement ? requirementMode : undefined,
+          );
+        completed += 1;
+      }
+    } catch (error) {
+      setFiles(selected.slice(completed));
+      setInputKey((value) => value + 1);
+      let refreshError = "";
+      try {
+        await w.refresh();
+      } catch {
+        refreshError =
+          " Не удалось обновить список; обновите страницу перед повтором.";
+      }
+      throw Error(
+        `Загружено файлов: ${completed} из ${selected.length}. Ошибка в ${selected[completed].name}: ${(error as Error).message}. Неотправленные файлы оставлены для повторной загрузки.${refreshError}`,
+      );
+    }
+    setFiles([]);
     setReplace(undefined);
     setInputKey((value) => value + 1);
   }
@@ -125,7 +228,7 @@ export function DocumentCard({ kind }: { kind: "residuals" | "requirement" }) {
       </div>
       <p className="muted">
         {isRequirement
-          ? "Что планируется закупить — потребность из TXT"
+          ? "Что планируется закупить — один опросный лист или список отдельных позиций"
           : "Что уже есть на складах компании — база Excel"}
       </p>
       {documents.map((document) => (
@@ -139,6 +242,13 @@ export function DocumentCard({ kind }: { kind: "residuals" | "requirement" }) {
               {document.meta.size_bytes
                 ? ` · ${(Number(document.meta.size_bytes) / 1024).toFixed(0)} КБ`
                 : ""}
+              {isRequirement && (
+                <span className="block">
+                  {document.meta.requirement_mode === "lines"
+                    ? `Список: одна строка = одна позиция${typeof document.meta.requirement_positions === "number" ? ` · ${document.meta.requirement_positions} позиций` : ""}`
+                    : "Опросный лист — обычный разбор"}
+                </span>
+              )}
             </small>
           </div>
           <div className="row wrap">
@@ -147,7 +257,11 @@ export function DocumentCard({ kind }: { kind: "residuals" | "requirement" }) {
               disabled={locked}
               onClick={() => {
                 setReplace(document.id);
-                setFile(null);
+                setFiles([]);
+                setRequirementMode(
+                  document.meta.requirement_mode === "lines" ? "lines" : "auto",
+                );
+                setInputKey((value) => value + 1);
               }}
             >
               Заменить файл
@@ -165,8 +279,32 @@ export function DocumentCard({ kind }: { kind: "residuals" | "requirement" }) {
           </div>
         </div>
       ))}
-      {(!documents.length || replace) && (
+      {(isRequirement || !documents.length || replace) && (
         <>
+          {isRequirement && (
+            <label>
+              Формат потребности
+              <select
+                value={requirementMode}
+                disabled={locked}
+                onChange={(event) =>
+                  setRequirementMode(event.target.value as RequirementMode)
+                }
+              >
+                <option value="auto">Опросный лист — обычный разбор</option>
+                <option value="lines">
+                  Список позиций — одна строка = одна позиция
+                </option>
+              </select>
+            </label>
+          )}
+          {isRequirement && (
+            <small>
+              {requirementMode === "lines"
+                ? "Каждая непустая строка TXT — отдельная позиция. Параметры одной позиции должны быть в одной строке."
+                : "Многострочный опросный лист обрабатывается обычным способом. Для списка изделий выберите режим «одна строка = одна позиция»."}
+            </small>
+          )}
           <label
             className={`file-drop ${dragging ? "dragging" : ""}`}
             onDragOver={(event) => {
@@ -176,40 +314,87 @@ export function DocumentCard({ kind }: { kind: "residuals" | "requirement" }) {
             onDragLeave={() => setDragging(false)}
             onDrop={drop}
           >
-            <span>{file?.name || "Перетащите файл сюда или выберите его"}</span>
+            <span>
+              {files.length
+                ? files.map((file) => file.name).join(", ")
+                : "Перетащите файл сюда или выберите его"}
+            </span>
             <input
               key={inputKey}
               aria-label={
                 isRequirement ? "Опросный лист TXT" : "База остатков Excel"
               }
               type="file"
-              accept={isRequirement ? ".txt,.xlsx,.docx,.pdf" : ".xlsx"}
+              multiple={isRequirement && !replace}
+              accept={
+                isRequirement
+                  ? requirementMode === "lines"
+                    ? ".txt"
+                    : ".txt,.xlsx,.docx,.pdf"
+                  : ".xlsx"
+              }
               disabled={locked}
-              onChange={(event) => setFile(event.target.files?.[0] || null)}
+              onChange={(event) =>
+                selectFiles(Array.from(event.target.files || []))
+              }
             />
             <small>
               До 20 МБ ·{" "}
               {isRequirement
-                ? "TXT; также поддерживаются XLSX, DOCX и текстовый PDF"
+                ? requirementMode === "lines"
+                  ? "TXT, одна позиция в каждой строке"
+                  : "TXT; также поддерживаются XLSX, DOCX и текстовый PDF"
                 : "XLSX"}
             </small>
           </label>
+          {isRequirement && !replace && (
+            <small>
+              Можно добавить несколько файлов. Загрузите все потребности до
+              начала обработки сессии.
+            </small>
+          )}
+          {isRequirement && requirementMode === "lines" && files.length > 0 && (
+            <p role={positionPreview?.error ? "alert" : "status"}>
+              {positionPreview?.error ||
+                (positionPreview
+                  ? `Позиций к загрузке: ${positionPreview.count}. Пустые строки пропускаются.`
+                  : "Подсчёт позиций…")}
+            </p>
+          )}
           <div className="row">
             <button
               className="btn-primary"
-              disabled={locked || !file}
+              disabled={
+                locked ||
+                !files.length ||
+                (isRequirement &&
+                  requirementMode === "lines" &&
+                  (!positionPreview || !!positionPreview.error))
+              }
               onClick={() =>
-                void w.act(upload, replace ? "Файл заменён" : "Файл загружен")
+                void w.act(
+                  upload,
+                  replace
+                    ? "Файл заменён"
+                    : files.length > 1
+                      ? "Файлы загружены"
+                      : "Файл загружен",
+                )
               }
             >
-              {replace ? "Сохранить замену" : "Загрузить файл"}
+              {replace
+                ? "Сохранить замену"
+                : files.length > 1
+                  ? `Загрузить файлы (${files.length})`
+                  : "Загрузить файл"}
             </button>
             {replace && (
               <button
                 className="btn-ghost"
                 onClick={() => {
                   setReplace(undefined);
-                  setFile(null);
+                  setFiles([]);
+                  setInputKey((value) => value + 1);
                 }}
               >
                 Отмена

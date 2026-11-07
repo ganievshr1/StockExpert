@@ -8,6 +8,11 @@ x-app: &app
     DB_USER: stockexpert
     POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?run init_env}
     REDIS_URL: redis://redis:6379/0
+    JOB_ROUTING_MODE: ${JOB_ROUTING_MODE:-shared}
+    DISPATCH_INTERVAL_SECONDS: ${DISPATCH_INTERVAL_SECONDS:-1}
+    OLLAMA_LLM_CONCURRENCY: '1'
+    B1_ARTIFACT_DIR: /data/b1
+    B1_API_BASE_URL: http://backend:8000/api/v1
     OLLAMA_URL: http://ollama:11434
     MINIO_ENDPOINT: minio:9000
     QDRANT_URL: http://qdrant:6333
@@ -45,7 +50,7 @@ services:
     environment:
       MINIO_ROOT_USER: ${MINIO_ACCESS_KEY}
       MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY}
-    ports: ['127.0.0.1:9001:9001']
+    ports: ['127.0.0.1:${MINIO_CONSOLE_PORT:-9001}:9001']
     volumes: [minio_data:/data]
     restart: unless-stopped
   qdrant:
@@ -76,7 +81,8 @@ services:
       postgres: {condition: service_healthy}
   backend:
     <<: *app
-    ports: ['127.0.0.1:8000:8000']
+    ports: ['127.0.0.1:${BACKEND_PORT:-8000}:8000']
+    volumes: [b1_artifacts:/data/b1]
     depends_on:
       migrate: {condition: service_completed_successfully}
     healthcheck:
@@ -84,9 +90,13 @@ services:
       interval: 15s
       timeout: 5s
       retries: 10
-  worker:
+  worker: &job-worker
     <<: *app
-    command: [celery, -A, app.tasks:celery_app, worker, --loglevel=INFO, --concurrency=1, --pool=solo, -Q, 'normalize_mtr,vector_match,gen_justification']
+    # B1 baseline: two identical solo workers, one slot each. The split override
+    # only changes queue subscriptions, never the worker count or limits.
+    command: [celery, -A, app.tasks:celery_app, worker, --loglevel=INFO, --concurrency=1, --pool=solo, --prefetch-multiplier=1, -Q, shared]
+    cpus: '1.0'
+    mem_limit: 3g
     volumes: [model_cache:/models/huggingface]
     depends_on:
       migrate: {condition: service_completed_successfully}
@@ -94,6 +104,40 @@ services:
       minio: {condition: service_started}
       qdrant: {condition: service_started}
       ollama: {condition: service_started}
+  worker-batch:
+    <<: *job-worker
+  worker-control:
+    <<: *app
+    # Beat only publishes periodic control messages; this independent consumer
+    # keeps dispatch running while both business execution slots are occupied.
+    command: [celery, -A, app.tasks:celery_app, worker, --loglevel=INFO, --concurrency=1, --pool=solo, --prefetch-multiplier=1, -Q, control]
+    cpus: '0.5'
+    mem_limit: 768m
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+      redis: {condition: service_healthy}
+  worker-laboratory:
+    <<: *app
+    # Research H1/H2/H3 tasks never occupy the interactive/business queues.
+    # Keep this worker idle during B1 measurements; it may share Ollama.
+    command: [celery, -A, app.tasks:celery_app, worker, --loglevel=INFO, --concurrency=1, --pool=solo, --prefetch-multiplier=1, -Q, laboratory]
+    volumes: [model_cache:/models/huggingface]
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+      redis: {condition: service_healthy}
+      minio: {condition: service_started}
+      qdrant: {condition: service_started}
+      ollama: {condition: service_started}
+  worker-b1:
+    <<: *app
+    profiles: [backend-experiments]
+    command: [celery, -A, app.tasks:celery_app, worker, --loglevel=INFO, --concurrency=1, --pool=solo, --prefetch-multiplier=1, -Q, b1_experiments]
+    cpus: '1.0'
+    mem_limit: 1g
+    volumes: [b1_artifacts:/data/b1]
+    depends_on:
+      backend: {condition: service_healthy}
+      redis: {condition: service_healthy}
   worker-regex:
     <<: *app
     build:
@@ -118,7 +162,8 @@ volumes:
   qdrant_data:
   ollama_data:
   model_cache:
+  b1_artifacts:
 
 networks:
   default:
-    name: stockexpert-network
+    name: ${STOCKEXPERT_NETWORK:-stockexpert-network}

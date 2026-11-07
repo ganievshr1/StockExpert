@@ -10,20 +10,27 @@ from app.services.llm import LLMTemporaryError
 from app.services import llm,model_registry,taxonomy,normalization_engine
 from app.services.execution import Execution,Cancelled,ACTIVE_STATUSES
 from app.services.workflow import prepare,normalize_all,match_all
+from app.services import job_telemetry
+from app.services.job_routing import (queue_for_job, prepared_base_id, TASK_ROUTES,
+                                     SHARED_QUEUE, CONTROL_QUEUE, LABORATORY_QUEUE, REGEX_QUEUE, B1_QUEUE)
 
 celery_app=Celery('stockexpert',broker=settings.REDIS_URL,backend=settings.REDIS_URL)
-celery_app.conf.update(task_serializer='json',accept_content=['json'],result_serializer='json',task_acks_late=True,task_reject_on_worker_lost=True,worker_prefetch_multiplier=1,broker_connection_retry_on_startup=True,broker_transport_options={'visibility_timeout':86400},result_backend_transport_options={'visibility_timeout':86400},visibility_timeout=86400,task_default_queue='normalize_mtr',beat_schedule={'dispatch-outbox':{'task':'stockexpert.dispatch','schedule':10.0}})
+celery_app.conf.update(task_serializer='json',accept_content=['json'],result_serializer='json',task_acks_late=True,task_reject_on_worker_lost=True,worker_prefetch_multiplier=1,broker_connection_retry_on_startup=True,broker_transport_options={'visibility_timeout':86400},result_backend_transport_options={'visibility_timeout':86400},visibility_timeout=86400,task_default_queue=SHARED_QUEUE,task_routes=TASK_ROUTES,beat_schedule={'dispatch-outbox':{'task':'stockexpert.dispatch','schedule':settings.DISPATCH_INTERVAL_SECONDS,'options':{'queue':CONTROL_QUEUE}}})
 
 @celery_app.task(name='stockexpert.dispatch')
 def dispatch():
     # DB is the durable outbox. Expired publication/worker leases are republished.
     cutoff=now()-timedelta(minutes=10)
     with SessionLocal() as db:
-        jobs=db.scalars(select(Job).where(Job.status.in_(ACTIVE_STATUSES),or_(Job.dispatched_at.is_(None),Job.dispatched_at<cutoff)).with_for_update(skip_locked=True)).all()
+        jobs=db.scalars(select(Job).where(Job.status.in_(ACTIVE_STATUSES),or_(Job.dispatched_at.is_(None),Job.dispatched_at<cutoff)).order_by(Job.created_at,Job.id).with_for_update(skip_locked=True)).all()
         for job in jobs:
             if job.heartbeat_at and job.heartbeat_at.replace(tzinfo=cutoff.tzinfo)>cutoff: continue
-            run_job.apply_async(args=[job.id],queue='vector_match' if job.kind=='match' else 'normalize_mtr')
+            session=db.get(ProcurementSession,job.session_id)
+            if session is None:continue
+            queue=queue_for_job(job.kind,prepared_base_id(session))
+            run_job.apply_async(args=[job.id],queue=queue)
             job.dispatched_at=now()
+            job_telemetry.published(job,queue,settings.JOB_ROUTING_MODE,job.dispatched_at)
         db.commit()
     dispatch_regex_experiments()
     dispatch_laboratory()
@@ -39,7 +46,7 @@ def dispatch_regex_experiments():
             or_(NormalizationExperiment.dispatched_at.is_(None), NormalizationExperiment.dispatched_at < cutoff)
         ).with_for_update(skip_locked=True)).all()
         for experiment in experiments:
-            run_regex_experiment.apply_async(args=[experiment.id], queue='regex_experiments')
+            run_regex_experiment.apply_async(args=[experiment.id], queue=REGEX_QUEUE)
             experiment.dispatched_at = now()
         db.commit()
 
@@ -61,9 +68,15 @@ def run_job(self,jid):
         try:
             s=db.scalar(select(ProcurementSession).where(ProcurementSession.id==job.session_id).with_for_update())
             if s is None:return
-            db.refresh(job)
+            # Publication is committed by the dispatcher after send succeeds.
+            # Lock/refresh the job here to avoid overwriting its first-publication
+            # metrics with a stale copy loaded before that transaction committed.
+            db.refresh(job,with_for_update=True)
             if job.status not in ACTIVE_STATUSES:return
             if job.status=='CANCEL_REQUESTED':raise Cancelled()
+            job.status='RUNNING'
+            job_telemetry.started(job,queue=(self.request.delivery_info or {}).get('routing_key'))
+            db.commit()
             config=model_registry.pin_job_config(db,s,job)
             h1=normalization_engine.pin_job(job)
             normalization_engine.check_rules(job)
@@ -95,6 +108,7 @@ def run_job(self,jid):
             db.scalar(select(ProcurementSession.id).where(ProcurementSession.id==s.id).with_for_update())
             execution.check()
             job.status='COMPLETED';job.stage='COMPLETED';job.error=None
+            job_telemetry.finished(job,'COMPLETED')
             from app.services.run_history import capture
             capture(db,s,job)
             db.commit()
@@ -108,6 +122,7 @@ def run_job(self,jid):
             db.rollback()
             if execution:execution.finish('CANCELLED')
             job=db.get(Job,jid);job.status='CANCELLED';job.stage='CANCELLED';job.error=None
+            job_telemetry.finished(job,'CANCELLED')
             s=db.get(ProcurementSession,job.session_id);s.status='CANCELLED'
             record(db,s.id,'SESSION_CANCELLED',{'job_id':jid});db.commit()
         except Exception as exc:
@@ -121,6 +136,7 @@ def run_job(self,jid):
             s=db.get(ProcurementSession,job.session_id)
             if cancelled:job.stage='CANCELLED';job.error=None
             if not retry: s.status='CANCELLED' if cancelled else 'FAILED'
+            job_telemetry.finished(job,job.status,terminal=not retry)
             record(db,s.id,'SESSION_CANCELLED' if cancelled else 'JOB_RETRY' if retry else 'JOB_FAILED',{'job_id':jid,'error':job.error});db.commit()
             logging.exception('Pipeline job failed: %s',jid)
             if retry: raise self.retry(exc=exc,countdown=15*(self.request.retries+1))
@@ -170,5 +186,11 @@ def dispatch_laboratory():
     with SessionLocal() as db:
         cutoff=now()-timedelta(minutes=2)
         for exp in db.scalars(select(LabExperiment).where(LabExperiment.status.in_(['QUEUED','RUNNING']),or_(LabExperiment.dispatched_at.is_(None),LabExperiment.dispatched_at<cutoff)).with_for_update(skip_locked=True)):
-            run_laboratory.apply_async(args=[exp.id],queue='vector_match');exp.dispatched_at=now()
+            run_laboratory.apply_async(args=[exp.id],queue=LABORATORY_QUEUE);exp.dispatched_at=now()
         db.commit()
+
+
+@celery_app.task(name='stockexpert.b1_experiment',queue=B1_QUEUE)
+def run_b1_experiment(ident):
+    from app.services.b1_experiments import run_experiment
+    run_experiment(ident)

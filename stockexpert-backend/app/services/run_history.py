@@ -2,6 +2,7 @@
 from copy import deepcopy
 from types import SimpleNamespace
 from fastapi.encoders import jsonable_encoder
+from fastapi import HTTPException
 from sqlalchemy import select
 from app.db import RunSnapshot,MetricRevision,Job,Item,Document,QualityReview,QualityCompletion,Match,public
 
@@ -19,7 +20,10 @@ def capture_latest(db,session):
 
 def get_snapshot(db,session,job):
     snap=db.get(RunSnapshot,job.id)
-    if snap:return snap.payload
+    if snap:
+        if snap.payload.get('b1_archived'):
+            raise HTTPException(410, 'Результаты технического B1 запуска архивированы; используйте экспорт B1')
+        return snap.payload
     from app.services.quality import latest_job
     latest=latest_job(db,session.id)
     from app.services.execution import ACTIVE_STATUSES

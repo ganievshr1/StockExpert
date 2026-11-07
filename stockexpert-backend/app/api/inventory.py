@@ -2,7 +2,7 @@ from fastapi import APIRouter,Depends,HTTPException
 from sqlalchemy import select,update
 from app.db import get_db,ProcurementSession,StockPosition,Item,Match,Job,now
 from app.api.deps import get_current_user,require_editor,require_expert,own_session
-from app.services.inventory import ensure_inventory
+from app.services.inventory import ensure_inventory,lock_stock_origins
 from app.services.execution import ACTIVE_STATUSES
 from app.services.audit import record
 router=APIRouter()
@@ -25,9 +25,11 @@ def use_stock(sid:str,mid:str,db=Depends(get_db),user=Depends(get_current_user))
 @router.delete('/normalized-bases/{sid}/stock')
 def clear_stock(sid:str,db=Depends(get_db),user=Depends(get_current_user)):
     require_editor(user);s=own_session(db,sid,user,lock=True)
+    # Shares transaction locks with enqueue/retry in every snapshot of this stock.
+    # The active-job check and CLEARED update are protected by the same lock.
+    roots=lock_stock_origins(db,s)
     if db.scalar(select(Job.id).where(Job.session_id==sid,Job.status.in_(ACTIVE_STATUSES)).limit(1)):raise HTTPException(409,'Сначала остановите обработку сессии')
     ensure_inventory(db,s)
-    roots=set(db.scalars(select(StockPosition.base_session_id).join(Item,Item.stock_id==StockPosition.id).where(Item.session_id==sid,StockPosition.organization_id==user.organization_id)))
     # Check every session sharing the chosen stock, not only the source session.
     linked=select(Item.session_id).join(StockPosition,StockPosition.id==Item.stock_id).where(StockPosition.base_session_id.in_(roots),StockPosition.organization_id==user.organization_id)
     if db.scalar(select(Job.id).where(Job.session_id.in_(linked),Job.status.in_(ACTIVE_STATUSES)).limit(1)):

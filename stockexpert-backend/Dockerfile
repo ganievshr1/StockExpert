@@ -7,7 +7,7 @@ RUN pip install --no-cache-dir -c constraints.txt -r requirements.txt
 ARG INSTALL_RERANKER=true
 RUN if [ "$INSTALL_RERANKER" = "true" ]; then pip install --no-cache-dir torch==2.7.0 --index-url https://download.pytorch.org/whl/cpu && pip install --no-cache-dir -c constraints.txt -r requirements-ml.txt; fi
 COPY . .
-RUN useradd -m -u 10001 appuser && mkdir -p /models/huggingface && chown -R appuser:appuser /models /app
+RUN useradd -m -u 10001 appuser && mkdir -p /models/huggingface /data/b1 && chown -R appuser:appuser /models /app /data/b1
 USER appuser
 EXPOSE 8000
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

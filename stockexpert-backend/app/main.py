@@ -4,7 +4,7 @@ from app.api.routes import router
 from app.core.config import settings
 
 app = FastAPI(
-    title=settings.PROJECT_NAME, version="3.9.12", openapi_url="/api/v1/openapi.json"
+    title=settings.PROJECT_NAME, version="3.9.13-b1.1", openapi_url="/api/v1/openapi.json"
 )
 app.add_middleware(
     CORSMiddleware,
@@ -27,7 +27,7 @@ def live():
 def root():
     return {
         "service": "StockExpert API",
-        "version": "3.9.12",
+        "version": "3.9.13-b1.1",
         "docs": "/docs",
         "frontend": "http://localhost:5173",
     }
@@ -123,3 +123,6 @@ from app.api.laboratory import router as laboratory_router
 app.include_router(laboratory_router,prefix=settings.API_V1_PREFIX)
 from app.api.prediction_exports import router as prediction_exports_router
 app.include_router(prediction_exports_router,prefix=settings.API_V1_PREFIX)
+
+from app.api.b1_experiments import router as b1_experiments_router
+app.include_router(b1_experiments_router, prefix=settings.API_V1_PREFIX)

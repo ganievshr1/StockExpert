@@ -1,0 +1,48 @@
+{
+  "release": "3.9.13-b1.1",
+  "date": "2026-11-07",
+  "backend": {
+    "full_suite": {
+      "passed": 391,
+      "failed": 0,
+      "duration_seconds": 54.13,
+      "junit": "validation/b1_positions/backend_full.xml"
+    },
+    "additional_ready_base_regression": {
+      "passed": 1,
+      "failed": 0,
+      "test": "test_copied_thermocolumn_base_full_matching_keeps_schema_and_accepts_ten_line_b1_source"
+    },
+    "final_targeted_suite": {
+      "passed": 43,
+      "failed": 0,
+      "command": "python -m pytest -q tests/test_requirement_lines.py tests/test_reusable_bases.py tests/test_b1_experiments_api.py"
+    },
+    "distinct_tests_verified": 392,
+    "new_tests": 17,
+    "note": "Only the additional regression test was added after the full suite; production backend code did not change."
+  },
+  "frontend": {
+    "passed": 72,
+    "test_files_passed": 12,
+    "new_tests": 8,
+    "production_build": "passed: tsc -b and vite build"
+  },
+  "checks": [
+    "Actual user thermocolumn TXT creates 10 normalized requirement Items with regex.",
+    "Explicit lines mode bypasses automatic splitting for regex and LLM dispatch.",
+    "LLM extraction and column mapping are replaced by test doubles in the LLM test.",
+    "Prepared document metadata retains parsing mode and nonempty-line count.",
+    "Ordinary multiline questionnaires and old documents retain legacy behavior.",
+    "Invalid upload/replace inputs leave database and object storage unchanged.",
+    "Multiple file upload and partial failure handling pass frontend tests.",
+    "Copied ready-base session completes full matching with 10 Match rows, preserved source passports and unchanged schema.",
+    "New approved session is offered by B1 and accepted for concurrent_10 and sequential_10."
+  ],
+  "limits": [
+    "No deployment to the user WSL/Docker environment was performed.",
+    "SQLite and controlled external service doubles are used; copied-base search uses in-memory Qdrant and test embeddings.",
+    "The ready-base integration test uses a small same-family catalogue, not the unavailable 12533-row user database.",
+    "These are functional tests, not GPU/LLM quality or latency experiments. They do not confirm hypothesis B1."
+  ]
+}

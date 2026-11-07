@@ -2,6 +2,35 @@
 @tailwind components;
 @tailwind utilities;
 
+.b1-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.b1-profile {
+  display: grid;
+  gap: 6px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--subtle);
+}
+.b1-requirements summary,
+.b1-experiments details > summary {
+  cursor: pointer;
+  padding: 8px 0;
+  font-weight: 600;
+}
+.b1-experiments code {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+.b1-run-facts { display: grid; gap: 8px; }
+@media (max-width: 760px) {
+  .b1-form-grid { grid-template-columns: minmax(0, 1fr); }
+}
+
 :root {
   font-family:
     Inter,

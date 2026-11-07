@@ -1,0 +1,431 @@
+{
+  "base_archive": "Stock3.9.12_H2_H3.zip",
+  "release": "3.9.13-b1",
+  "files": [
+    {
+      "path": ".gitignore",
+      "change": "added",
+      "sha256": "5b40ecac3b18212a2a2a3d9e4e81197d60b3a2fab54a9d6376f3d99968e3022e"
+    },
+    {
+      "path": "README_B1.md",
+      "change": "added",
+      "sha256": "d89500aab30c7a13ba08029dbc54a90ac94937e4a3ea4f456b566cd8cefbea24"
+    },
+    {
+      "path": "b1.sh",
+      "change": "added",
+      "sha256": "057e0b718e321fb5fa24e75ccab25695dc479a0d0a36de3f2db5c1e59daee750"
+    },
+    {
+      "path": "compose.b1.cpu.yml",
+      "change": "added",
+      "sha256": "c46fc6575a3016c5dbe4753812ded98414c2c6b2ec7d0cc370ba7d80eb5c710f"
+    },
+    {
+      "path": "compose.b1.shared.yml",
+      "change": "added",
+      "sha256": "63f40dbbfecdffbca645a87ee55faca06bebd5d0eb64271667ae61fb3ece800f"
+    },
+    {
+      "path": "compose.b1.split.yml",
+      "change": "added",
+      "sha256": "3d74abbd410545c913d4658b8f80e1e9a92904fc4301d04d2c6e81c764eb7880"
+    },
+    {
+      "path": "docs/B1_ARCHITECTURE.md",
+      "change": "added",
+      "sha256": "60049f112bfc896a19f2de10fe413c5bdbf583a7e26bcdb67bd390574480e17c"
+    },
+    {
+      "path": "docs/B1_ARCHITECTURE.svg",
+      "change": "added",
+      "sha256": "fff329a947512cf373bfb7c0675954c1c9c6694dc0b0158ab4153242874618f5"
+    },
+    {
+      "path": "docs/B1_QUICKSTART_RU.md",
+      "change": "added",
+      "sha256": "323ffe6e6ff265648b371de853c5a604589bf71261ffb6e978220757e7dda651"
+    },
+    {
+      "path": "docs/B1_SIMULATION.md",
+      "change": "added",
+      "sha256": "27d079e4b067b90fef3c9b0565a981766c1d81a324945e68521173930b393edc"
+    },
+    {
+      "path": "docs/B1_VALIDATION.json",
+      "change": "added",
+      "sha256": "6ccc2a0038d3223e90563185997b050ea9aca504b4267fe8af18b9114ed34c7b"
+    },
+    {
+      "path": "docs/StockExpert_B1_implementation_and_results.docx",
+      "change": "added",
+      "sha256": "3f0018c7c48e133021d7cc386805973b880c73f7082778410338723320c2d1a8"
+    },
+    {
+      "path": "experiments/b1_fixture_workbook.mjs",
+      "change": "added",
+      "sha256": "5b8fe64262b9abd2bacf3a11c39110a8892efc03c2575c5a7721eda9abdc4a49"
+    },
+    {
+      "path": "experiments/b1_heavy_assumptions.json",
+      "change": "added",
+      "sha256": "9587d11ac1e05fafaf3c9f18c60292490f98969ca2971a9fd20dfe41890fa1bd"
+    },
+    {
+      "path": "experiments/b1_simulation.py",
+      "change": "added",
+      "sha256": "fd86f0036e1f5c91771c5661756e9ddb3605b02f3a1215d05d8ad939b6b745a0"
+    },
+    {
+      "path": "experiments/generate_b1_fixture.py",
+      "change": "added",
+      "sha256": "069512635a3f8095c56e4046c7f6f0486b52cafd705ded44421b764ad143e167"
+    },
+    {
+      "path": "experiments/results/b1_simulation/catalog_progress.csv",
+      "change": "added",
+      "sha256": "b4d8d2637dcaf1d668d16c569828b055de3b15030756ba4c230d2b47497d090c"
+    },
+    {
+      "path": "experiments/results/b1_simulation/comparison.csv",
+      "change": "added",
+      "sha256": "f7cc7a8fff1a2883ff4cc86370b190daaf54e7f30346b5a7be08f058fbdefc5f"
+    },
+    {
+      "path": "experiments/results/b1_simulation/manifest.json",
+      "change": "added",
+      "sha256": "82092f3304cd730daec5d007123ec0e038d899e6fcb5dbc41615c3ef1c28cf6f"
+    },
+    {
+      "path": "experiments/results/b1_simulation/raw_jobs.csv",
+      "change": "added",
+      "sha256": "3dae66b07ce1f4e89ef93cb72d6e98782aabd9f91f6a340979260c4864ba69b3"
+    },
+    {
+      "path": "experiments/results/b1_simulation/raw_jobs.jsonl",
+      "change": "added",
+      "sha256": "2cb93f26d6f5191155a2c35d2b88decde2d271b174cdc87083c11904fedbba79"
+    },
+    {
+      "path": "experiments/results/b1_simulation/runs.csv",
+      "change": "added",
+      "sha256": "dda21537003e66b0440c8131dbc1771c16d915f2fc6f2ce6882c74c752bf7e57"
+    },
+    {
+      "path": "experiments/results/b1_simulation/summary.json",
+      "change": "added",
+      "sha256": "c715626e0be37e5998d37ccfd79220d662509d41ae29f2e10e2f7ab35e588b1a"
+    },
+    {
+      "path": "experiments/results/b1_simulation_heavy/catalog_progress.csv",
+      "change": "added",
+      "sha256": "017d46f9041cbbd915620283730c340ed7a34887a9dfdd83afed29c33019d072"
+    },
+    {
+      "path": "experiments/results/b1_simulation_heavy/comparison.csv",
+      "change": "added",
+      "sha256": "262216c356326a136b37efe3397dcf082c60d6e8b6c6f30689ea9b0b5131c20b"
+    },
+    {
+      "path": "experiments/results/b1_simulation_heavy/manifest.json",
+      "change": "added",
+      "sha256": "666b1694beaf414053141f59c155dae4c117d558feffa4331834efaaa5ec1dc9"
+    },
+    {
+      "path": "experiments/results/b1_simulation_heavy/raw_jobs.csv",
+      "change": "added",
+      "sha256": "5d2f06125f8bbc5f2fecd376ff7333a2e9f5aff9f21e3835f1e91a11723d073f"
+    },
+    {
+      "path": "experiments/results/b1_simulation_heavy/raw_jobs.jsonl",
+      "change": "added",
+      "sha256": "fa0e851765b935a83f4acc5e1649aaafd24bef44aa062cb24b590e7b51f5b198"
+    },
+    {
+      "path": "experiments/results/b1_simulation_heavy/runs.csv",
+      "change": "added",
+      "sha256": "3d0db4edbdfc5013497de0758f1cd5217be5fb9c4e1e1d31a556ccc3594e607e"
+    },
+    {
+      "path": "experiments/results/b1_simulation_heavy/summary.json",
+      "change": "added",
+      "sha256": "4192eef1b712509fd73778392c984f63467e3ae5bf240e5d70dcb19184946ecc"
+    },
+    {
+      "path": "fixtures/B1_catalog_12000_SYNTHETIC.csv",
+      "change": "added",
+      "sha256": "5251949eacf07bb606ff7ac8f8a8f45efd7906ee41276e724905a4fc4108a5a2"
+    },
+    {
+      "path": "fixtures/B1_catalog_12000_SYNTHETIC.xlsx",
+      "change": "added",
+      "sha256": "2d6e0eb8c9327c1bbff9f7d6c1b50233974b688da928f5a0ad3df4f6c127db0e"
+    },
+    {
+      "path": "fixtures/B1_fixture_manifest.json",
+      "change": "added",
+      "sha256": "d52907c31ae5d62ced96dbd4ecaa8b3dff878dc11a4dca9b3227c2229c0f9d0d"
+    },
+    {
+      "path": "fixtures/B1_requirements_10_SYNTHETIC.txt",
+      "change": "added",
+      "sha256": "1bf4c5aa4ffb8072fd6454bb63fd70b31c30f83aaaf95422a837dec01471bd65"
+    },
+    {
+      "path": "fixtures/README.md",
+      "change": "added",
+      "sha256": "75afccc3aab3c853aeac6adacb4d633f77621105a4e2886b18a61a42cd72f3bb"
+    },
+    {
+      "path": "fixtures/requirements_10/Q01.txt",
+      "change": "added",
+      "sha256": "4d91628dc2e14155eb8ad0074c633739cd859a4ceb758b4c59a54183a788284f"
+    },
+    {
+      "path": "fixtures/requirements_10/Q02.txt",
+      "change": "added",
+      "sha256": "bf105429e7fdc5155f665c615c96821eab65d0db35e451123a281ac4abd4aa27"
+    },
+    {
+      "path": "fixtures/requirements_10/Q03.txt",
+      "change": "added",
+      "sha256": "27e89aebec2811cf64018d4455fddab44a61b2997ea9e0a1f8707fc07b0d5b75"
+    },
+    {
+      "path": "fixtures/requirements_10/Q04.txt",
+      "change": "added",
+      "sha256": "a9c856b0520211d354e996576f0e5cadfd6d5bdd2d0b26b65f66f9480a027585"
+    },
+    {
+      "path": "fixtures/requirements_10/Q05.txt",
+      "change": "added",
+      "sha256": "08c0deb0746f85efb7703ab70a6256ab6e0bbc97f37dc26becc6a96bd80f2adb"
+    },
+    {
+      "path": "fixtures/requirements_10/Q06.txt",
+      "change": "added",
+      "sha256": "837dcb132f35a714a0b8a298af17816e6fbec1892d6a4d18a106ea5af216f207"
+    },
+    {
+      "path": "fixtures/requirements_10/Q07.txt",
+      "change": "added",
+      "sha256": "41d9b63739884505ba8765a87b9d1031892c45eb154a5916a9bfe4501074fc1e"
+    },
+    {
+      "path": "fixtures/requirements_10/Q08.txt",
+      "change": "added",
+      "sha256": "2ecbc69eda60d425b895571b9d0a83b8517d4f4fdfae657a7598ea128e5262fe"
+    },
+    {
+      "path": "fixtures/requirements_10/Q09.txt",
+      "change": "added",
+      "sha256": "8a3e403eac7f30580ac4b242ef46b6484ca9132a47f31804a48dc36c711f2b37"
+    },
+    {
+      "path": "fixtures/requirements_10/Q10.txt",
+      "change": "added",
+      "sha256": "440b04cafdfaeb96d25cf9b47a599caa466162c91aff50b98c2fdc6f22e03848"
+    },
+    {
+      "path": "stockexpert-backend/Dockerfile",
+      "change": "modified",
+      "sha256": "6079c7121ef0580212c890fefeae13d7170330e15347a90d615d63867aad1aeb"
+    },
+    {
+      "path": "stockexpert-backend/MANIFEST.sha256",
+      "change": "modified",
+      "sha256": "a3115caf2ed03cf8a31622b087796ba208993f62eb2ee54c60e8ba9598fb2449"
+    },
+    {
+      "path": "stockexpert-backend/app/api/b1_experiments.py",
+      "change": "added",
+      "sha256": "9e77b7f4ffe901811396b322fbe0e0ad7edbde9d8535841ad7555b2224af16ce"
+    },
+    {
+      "path": "stockexpert-backend/app/api/inventory.py",
+      "change": "modified",
+      "sha256": "abaa34ccd19bd32008f405f49ef76585c2c3b9161bd995ef5f6dd2e4f16f4e0e"
+    },
+    {
+      "path": "stockexpert-backend/app/api/routes.py",
+      "change": "modified",
+      "sha256": "92851d46f7fd6768ca2653caf7771afbefe9b2aa112db2898499c76a99ce204d"
+    },
+    {
+      "path": "stockexpert-backend/app/core/config.py",
+      "change": "modified",
+      "sha256": "a27b14181378d4c68024bce270e21de80a39839243ba176a2d8fa747d645739f"
+    },
+    {
+      "path": "stockexpert-backend/app/main.py",
+      "change": "modified",
+      "sha256": "5dfb5459fabb3818a32dd8720883cf7bf3b8dbc52e9e7a2a8c4a62411fbd6d5d"
+    },
+    {
+      "path": "stockexpert-backend/app/services/b1_experiments.py",
+      "change": "added",
+      "sha256": "136f21a3a9fb353af4779049bb1703cd1699b99457f50acf297a532eb344bf47"
+    },
+    {
+      "path": "stockexpert-backend/app/services/inventory.py",
+      "change": "modified",
+      "sha256": "45288c462af7822b5e480b79f2a9215d4a9a54ff2e0175426f7c174423684c87"
+    },
+    {
+      "path": "stockexpert-backend/app/services/job_routing.py",
+      "change": "added",
+      "sha256": "bab1ba901ccffb6dfd55aff0822bb6dd13d64b6881f2a1d4d840fc8e4ed1eabf"
+    },
+    {
+      "path": "stockexpert-backend/app/services/job_telemetry.py",
+      "change": "added",
+      "sha256": "c2f8b7882ae500596fb2218d5e0bc182cc399f811cdf4a15df196b791629690f"
+    },
+    {
+      "path": "stockexpert-backend/app/services/run_history.py",
+      "change": "modified",
+      "sha256": "b6f52973ece75c390032847d3ff00d20924fe58fe5eeeff34b236e532bddceda"
+    },
+    {
+      "path": "stockexpert-backend/app/services/search.py",
+      "change": "modified",
+      "sha256": "636f9c9d865d780ea78c8f71c1cff305effb7534a753ce4c4f66f686e29c5d28"
+    },
+    {
+      "path": "stockexpert-backend/app/services/workflow.py",
+      "change": "modified",
+      "sha256": "c76285725f3334dba67df21dbfbb90b3dd5ae4c2238a5d56660ab720ea7d44c0"
+    },
+    {
+      "path": "stockexpert-backend/app/tasks.py",
+      "change": "modified",
+      "sha256": "05306a9480f9db771f974f07a01f4a11fa15b2c223ffe6e739593461ae5200b3"
+    },
+    {
+      "path": "stockexpert-backend/docker-compose.yml",
+      "change": "modified",
+      "sha256": "b94e90b8ecb470f9e9970a0f760a76104532da51813720fb8cfcc7d8b8ad6c65"
+    },
+    {
+      "path": "stockexpert-backend/requirements-dev.txt",
+      "change": "modified",
+      "sha256": "e1d25018fe096a5d45d4ff50ef3a67a0af1b476ca5b46afdfd1cc9ee01f7ec00"
+    },
+    {
+      "path": "stockexpert-backend/scripts/b1_load.py",
+      "change": "added",
+      "sha256": "88149649ccf51db14b0380ab11060f813f4b652bd4891c4b2e70f88190acd345"
+    },
+    {
+      "path": "stockexpert-backend/scripts/upgrade_preserve_data.sh",
+      "change": "modified",
+      "sha256": "8c3f0aaa50ee43ffdf2a76bc2d68f849ee235c41b49871581c6f9f8d6083de0f"
+    },
+    {
+      "path": "stockexpert-backend/tests/test_b1_compose_budget.py",
+      "change": "added",
+      "sha256": "5b02141b8e696afbb6c0086fb82066fe556e4905e278a87eeb9044926907cf87"
+    },
+    {
+      "path": "stockexpert-backend/tests/test_b1_experiments_api.py",
+      "change": "added",
+      "sha256": "8e32de3cb9d9b980f2557104edd432b591fd04d3dd9115bca8d6984ea8c790f7"
+    },
+    {
+      "path": "stockexpert-backend/tests/test_b1_runner.py",
+      "change": "added",
+      "sha256": "b1aed437ace5207de78350a134c228c0d0ec75001cb9f448c496b85c7c2785da"
+    },
+    {
+      "path": "stockexpert-backend/tests/test_job_routing.py",
+      "change": "added",
+      "sha256": "9af6f09ee8278c80df8df422263983435298872e63e587f7b14ced5a7eaeb22f"
+    },
+    {
+      "path": "stockexpert-backend/tests/test_job_telemetry.py",
+      "change": "added",
+      "sha256": "44d49420ed48f99725c0c80449befbde98abc02c7b2347299c8ff43e9e1b323e"
+    },
+    {
+      "path": "stockexpert-backend/tests/test_jobs.py",
+      "change": "modified",
+      "sha256": "851ac77fed2dac044ab8ace8c05760483c9a57eae14d6da3f2950fde7f2e7994"
+    },
+    {
+      "path": "stockexpert-backend/tests/test_multiuser_b1.py",
+      "change": "added",
+      "sha256": "94fcc9cb677a64677cdcf86f1a756fb3e9fb35a74d5b9239efab912466fe84f9"
+    },
+    {
+      "path": "stockexpert-backend/tests/test_search_concurrency_b1.py",
+      "change": "added",
+      "sha256": "4da3ed53cd9541cbfc27d0c2c2061c73d4d9903545ae0c1bb293edc22c489650"
+    },
+    {
+      "path": "stockexpert-frontend/MANIFEST.sha256",
+      "change": "modified",
+      "sha256": "9453b47dbdab6c739141caf6d6e975021ea077e5f4b5d9c7c34324e4fc94180c"
+    },
+    {
+      "path": "stockexpert-frontend/b1-preview.html",
+      "change": "added",
+      "sha256": "cd75a94acf067f0fb3871fe295e619f09bf7526c10a681710388d957af1d38b1"
+    },
+    {
+      "path": "stockexpert-frontend/docker-compose.yml",
+      "change": "modified",
+      "sha256": "3f3e80081d45dc725a4958db4c390434528ee3f261eebb158a2af354862a2867"
+    },
+    {
+      "path": "stockexpert-frontend/package-lock.json",
+      "change": "modified",
+      "sha256": "6a1b693a6579033998381e0930430841050aef922f41a370a9ec4b2d2b1cf0d4"
+    },
+    {
+      "path": "stockexpert-frontend/package.json",
+      "change": "modified",
+      "sha256": "7b8264f9c6c7e8c5b7fcde3b9ee312a5434ec68de25b959bacb023b405b1857b"
+    },
+    {
+      "path": "stockexpert-frontend/src/components/B1ExperimentPanel.tsx",
+      "change": "added",
+      "sha256": "f23714268721b4c5f0c0688c51c68bc63184b23f5a4864b110f2cfbcbd456d41"
+    },
+    {
+      "path": "stockexpert-frontend/src/index.css",
+      "change": "modified",
+      "sha256": "8ca70aa146a7820b3f1ec0e4a9eadfae7842e75eabccc86b2f20d8e720315af3"
+    },
+    {
+      "path": "stockexpert-frontend/src/pages/DeveloperPage.tsx",
+      "change": "modified",
+      "sha256": "8bfc289373e6d9d876c2809adb66ac691f18ac35d8d998fddea92917daf68dc2"
+    },
+    {
+      "path": "stockexpert-frontend/src/services/b1Experiments.ts",
+      "change": "added",
+      "sha256": "d44ec76e7bbf498454758dcaaa42f28a4d7855d8393803b26971033a4c000e59"
+    },
+    {
+      "path": "stockexpert-frontend/tests/b1-experiments.test.tsx",
+      "change": "added",
+      "sha256": "8bd9b4620a7b589d17d5dbf04d283ca87c7c33d4a9ef5f7a02e016e05e40170b"
+    },
+    {
+      "path": "tests/test_b1_launcher.py",
+      "change": "added",
+      "sha256": "b6343203156d64c559ef128c09c309753f4f4882050845206db9e8bde0d30a5c"
+    },
+    {
+      "path": "validation/b1/backend_tests.xml",
+      "change": "added",
+      "sha256": "038b1d9f8182447be1307729dd052cfe2d406444bf2122dee8a3a26f90ef3493"
+    },
+    {
+      "path": "validation/b1/frontend_tests.xml",
+      "change": "added",
+      "sha256": "d861d7f3872c1a2846f67fca4d2809ae74faeb980d0d6dadb65df5c7638524bb"
+    }
+  ]
+}

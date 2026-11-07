@@ -1,0 +1,23 @@
+# Use after stockexpert-backend/docker-compose.yml; paths resolve against that file.
+# Identical budget to split: 2 job slots, 2 CPU maximum, 6 GiB job-worker memory.
+x-b1-mode: &b1-mode
+  JOB_ROUTING_MODE: shared
+services:
+  backend:
+    environment: *b1-mode
+  worker:
+    environment: *b1-mode
+    command: [celery, -A, app.tasks:celery_app, worker, --loglevel=INFO, --concurrency=1, --pool=solo, --prefetch-multiplier=1, -Q, shared]
+  worker-batch:
+    environment: *b1-mode
+    command: [celery, -A, app.tasks:celery_app, worker, --loglevel=INFO, --concurrency=1, --pool=solo, --prefetch-multiplier=1, -Q, shared]
+  worker-control:
+    environment: *b1-mode
+  worker-laboratory:
+    environment: *b1-mode
+  worker-regex:
+    environment: *b1-mode
+  worker-b1:
+    environment: *b1-mode
+  beat:
+    environment: *b1-mode

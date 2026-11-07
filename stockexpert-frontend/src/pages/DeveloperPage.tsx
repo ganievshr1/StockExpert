@@ -1,6 +1,7 @@
 import {QualityPage} from './QualityPage';
 import {LabDashboard} from '../components/LabDashboard';
 import {HypothesisComparison} from '../components/HypothesisComparison';
+import { B1ExperimentPanel } from '../components/B1ExperimentPanel';
 import { useEffect, useState } from "react";
 import { useWorkspace } from "../state/Workspace";
 import {
@@ -587,13 +588,15 @@ function AutomaticDeveloperPanel() {
 
 
 export function DeveloperPage() {
- const w=useWorkspace(); const [source,setSource]=useState<"manual"|"automatic">("automatic"); const [revision,setRevision]=useState(0);
+ const w=useWorkspace(); const [source,setSource]=useState<"manual"|"automatic"|"b1">("automatic"); const [revision,setRevision]=useState(0);
  if(w.user?.role!=="admin") return <ErrorBox message="Раздел доступен только администратору"/>;
  return <div className="section-gap"><PageTitle eyebrow="Эксперименты StockExpert" title="Для разработчика" description="Ручная и автоматическая проверка исходных данных, отчёты и сравнение H1, H2, H3."/>
- <div className="tabs" role="tablist" aria-label="Режим проверки метрик"><button role="tab" aria-selected={source==='manual'} className={source==='manual'?'active':''} onClick={()=>setSource('manual')}>Ручная проверка метрик</button><button role="tab" aria-selected={source==='automatic'} className={source==='automatic'?'active':''} onClick={()=>setSource('automatic')}>Автоматическая проверка метрик</button></div>
+ <div className="tabs" role="tablist" aria-label="Режим проверки метрик"><button role="tab" aria-selected={source==='manual'} className={source==='manual'?'active':''} onClick={()=>setSource('manual')}>Ручная проверка метрик</button><button role="tab" aria-selected={source==='automatic'} className={source==='automatic'?'active':''} onClick={()=>setSource('automatic')}>Автоматическая проверка метрик</button><button role="tab" aria-selected={source==='b1'} className={source==='b1'?'active':''} onClick={()=>setSource('b1')}>Проверка гипотезы B1</button></div>
+ {source==='b1'?<B1ExperimentPanel/>:<>
  <label>Сессия для проверки и лабораторных методов<select aria-label="Сессия разработчика" value={w.sid||''} onChange={e=>{w.selectSession(e.target.value);w.setTab('developer');}}><option value="">Выберите сессию</option>{(w.sessions||[]).map(s=><option key={s.id} value={s.id}>{s.title}</option>)}</select></label>
  {source==='automatic'?<AutomaticDeveloperPanel/>:<><Notice title="Проверка исходных данных">H1: сверяйте значения, единицы и цитаты. H2: проверьте конечную категорию. H3: оцените все пары «потребность–позиция», включая позиции вне выдачи. Ответы сохраняются по выбранному запуску.</Notice>{w.sid?<QualityPage key={w.sid} initialMode="parameters" onReviewed={()=>setRevision(v=>v+1)}/>:<p>Выберите сессию с завершённым расчётом.</p>}</>}
  {w.sid&&<LabDashboard key={`${source}-${w.sid}`} source={source} refreshKey={revision}/>}
  <HypothesisComparison source={source} refreshKey={revision}/>
+ </>}
  </div>;
 }

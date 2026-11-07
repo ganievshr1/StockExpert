@@ -1,0 +1,8 @@
+# Optional CPU-only Ollama. Requires Docker Compose 2.24.4+ for !reset.
+# Use identically for baseline and split; do not compare CPU against GPU.
+services:
+  ollama:
+    deploy:
+      resources:
+        reservations:
+          devices: !reset []

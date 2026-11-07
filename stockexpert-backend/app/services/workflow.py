@@ -38,7 +38,11 @@ def prepare(db,s,job,tick):
                     if not existing: db.add(Item(session_id=s.id,document_id=d.id,kind='residual',sheet=sheet,row_index=row['row_index'],raw=row['cells']))
         else:
             text=document_text(data,d.filename)
-            d.meta={'text':text}
+            # Schema discovery must retain the user's explicit TXT list mode.
+            meta={**(d.meta or {}),'text':text}
+            if meta.get('requirement_mode','auto')=='lines':
+                meta['requirement_positions']=len(requirement_extraction.split_lines(text))
+            d.meta=meta
             req_text.append({'document_id':d.id,'text':text})
         db.commit();tick('PARSING')
     if not samples or not req_text: raise ValueError('Upload residuals and requirement first')
@@ -116,7 +120,13 @@ def normalize_all(db,s,job,tick):
         if db.scalar(select(Item).where(Item.document_id==d.id)): continue
         tick('REQUIREMENT_PARSING')
         text=d.meta['text']
-        parts,split_issues=normalization_engine.split_requirement(text) if regex else requirement_extraction.split(text)
+        mode=d.meta.get('requirement_mode','auto')
+        if mode=='lines':
+            parts,split_issues=requirement_extraction.split_lines(text),[]
+        elif mode=='auto':
+            parts,split_issues=normalization_engine.split_requirement(text) if regex else requirement_extraction.split(text)
+        else:
+            raise ValueError('Unknown requirement parsing mode')
         tick('REQUIREMENT_PARSING')
         for idx,part in enumerate(parts):
             if not part.strip() or part not in text: raise ValueError('Requirement item not grounded in source')
@@ -221,7 +231,8 @@ def match_all(db,s,job,tick):
     items=list(db.scalars(select(Item).where(Item.session_id==s.id,Item.kind=='residual',Item.passport['attributes'].as_string().is_not(None),Item.id.in_(available_item_ids(db)))))
     reqs=list(db.scalars(select(Item).where(Item.session_id==s.id,Item.kind=='requirement',Item.passport['attributes'].as_string().is_not(None))))
     if not items or not reqs: raise ValueError('Нет доступных нормализованных остатков или потребностей. Запасы могли быть использованы либо база очищена.')
-    if s.normalization_method != 'regex' or s.taxonomy_enabled: llm.unload()
+    # Ollama is shared by all users/workers. Per-session model eviction can
+    # interrupt another user's normalization; let Ollama manage residency.
     tick('VECTORIZATION');index_stats=search.index_items(s.id,items,lambda:tick('VECTORIZATION'))
     job.params={**job.params,'index_stats':index_stats};db.commit()
     s.progress=75;db.commit()
