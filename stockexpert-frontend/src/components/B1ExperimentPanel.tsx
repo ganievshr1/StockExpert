@@ -23,15 +23,20 @@ const phases: Record<string, string> = {
   WARMUP: "Прогрев — вне измеряемой выборки",
   MEASURING: "Измерение",
   DRAINING: "Ожидание завершения начатых запросов",
+  COMPLETED: "Измерение завершено",
 };
 const scenarios: Record<B1Scenario, { title: string; description: string }> = {
   concurrent_10: {
     title: "10 пользователей × 1 запрос одновременно",
-    description: "Диагностика конкуренции: 10 изолированных сессий запускают подбор параллельно.",
+    description: "Диагностика конкуренции: 10 учётных записей одновременно отправляют по одному запросу в отдельных сессиях.",
   },
   sequential_10: {
     title: "1 пользователь × 10 запросов последовательно",
     description: "Диагностика последовательной нагрузки: следующий запрос начинается после завершения предыдущего.",
+  },
+  single_user_parallel: {
+    title: "1 пользователь × 10 запросов одновременно",
+    description: "Одна учётная запись одновременно отправляет 10 запросов в отдельных сессиях. Следующий запрос не ждёт результата предыдущего.",
   },
   confirmation: {
     title: "Полный протокол: 5 пар baseline / split",
@@ -60,6 +65,7 @@ export function B1ExperimentPanel() {
   const [requirementId, setRequirementId] = useState("");
   const [backgroundId, setBackgroundId] = useState("");
   const [scenario, setScenario] = useState<B1Scenario>("concurrent_10");
+  const [timeoutInput, setTimeoutInput] = useState("120");
   const [title, setTitle] = useState("");
   const [selectedId, setSelectedId] = useState("");
   const [pollVersion, setPollVersion] = useState(0);
@@ -72,6 +78,9 @@ export function B1ExperimentPanel() {
     .sort((a, b) => (a.document_id || "").localeCompare(b.document_id || "") || (a.row_index || 0) - (b.row_index || 0) || a.id.localeCompare(b.id)).slice(0, 10);
   const base = config.data?.ready_bases.find(item => item.session_id === baseId);
   const isFull = scenario === "confirmation";
+  const diagnosticRuntime = (config.data?.runtime_profile ?? "standard") !== "standard";
+  const diagnosticTimeout = Number(timeoutInput);
+  const validTimeout = Number.isInteger(diagnosticTimeout) && diagnosticTimeout >= 30 && diagnosticTimeout <= 3600;
   const active = !!experiment && !terminal.has(experiment.status);
 
   useEffect(() => {
@@ -116,6 +125,7 @@ export function B1ExperimentPanel() {
     const created = await b1Api.create({
       scenario, base_session_id: baseId, requirement_session_id: requirementId,
       ...(isFull && backgroundId ? { background_session_id: backgroundId } : {}),
+      ...(!isFull ? { diagnostic_timeout_seconds: diagnosticTimeout } : {}),
       ...(title.trim() ? { campaign_title: title.trim() } : {}),
     });
     setExperiment(created);
@@ -124,9 +134,12 @@ export function B1ExperimentPanel() {
   });
   const current = experiment?.current_run;
   const summary = current?.summary || experiment?.summary;
+  const count = (key: "scheduled" | "started" | "completed" | "success" | "failed" | "missed") => current?.[key] ?? summary?.[key];
+  const started = count("started"), completed = count("completed");
+  const inflight = current?.inflight ?? (typeof started === "number" && typeof completed === "number" ? Math.max(0, started - completed) : undefined);
   const pendingMode = experiment?.expected_routing_mode || experiment?.plan?.find(run => run.status === "PENDING")?.routing_mode;
   const canContinue = experiment?.status === "AWAITING_PROFILE" || (!!experiment && ["FAILED", "INTERRUPTED", "CANCELLED"].includes(experiment.status) && !!pendingMode);
-  const canStart = !!config.data && !!baseId && !!requirementId && readyRequirements.length === 10 && !requirements.loading && !requirements.error && (!isFull || !!backgroundId) && !active && !busy;
+  const canStart = !!config.data && !!baseId && !!requirementId && readyRequirements.length === 10 && !requirements.loading && !requirements.error && (isFull ? !!backgroundId && !diagnosticRuntime : validTimeout) && !active && !busy;
 
   return <div className="section-gap b1-experiments">
     <section className="panel stack" aria-labelledby="b1-title">
@@ -140,6 +153,7 @@ export function B1ExperimentPanel() {
       {config.error && <ErrorBox message={config.error} />}
       {config.data && <>
         <div className="b1-profile"><strong>Текущая конфигурация: {profileLabel(config.data.routing_mode)}</strong><small>Режим задаётся настройкой backend и рабочих процессов. Эта форма запускает измерение в действующей конфигурации.</small></div>
+        {diagnosticRuntime && <Notice title="Параллельный профиль CPU/GPU" tone="warning">Отдельная диагностика; его результаты нельзя сравнивать с прежним baseline как проверку B1. Для полного протокола переключитесь на стандартный профиль.</Notice>}
         <div className="b1-form-grid">
           <label>Готовая база (цель — 12 000 строк)<select value={baseId} onChange={event => setBaseId(event.target.value)} disabled={busy || active}>
             <option value="">Выберите нормализованную базу</option>
@@ -163,12 +177,16 @@ export function B1ExperimentPanel() {
           </tbody></table></ScrollArea>
         </details>}
         <label>Сценарий проверки<select value={scenario} onChange={event => setScenario(event.target.value as B1Scenario)} disabled={busy || active}>
-          {(Object.entries(scenarios) as [B1Scenario, typeof scenarios[B1Scenario]][]).map(([key, value]) => <option key={key} value={key}>{value.title}</option>)}
+          {(Object.entries(scenarios) as [B1Scenario, typeof scenarios[B1Scenario]][]).map(([key, value]) => <option key={key} value={key} disabled={key === "confirmation" && diagnosticRuntime}>{value.title}</option>)}
         </select></label>
         <Notice title={isFull ? "Подтверждающий протокол" : "Диагностический запуск"} tone={isFull ? "info" : "warning"}>
           {scenarios[scenario].description} {isFull ? "Полная кампания занимает не менее 5,5 часов плюс подготовка и завершение запросов." : "10 запросов проверяют поведение системы; этого недостаточно для подтверждения B1."}
         </Notice>
+        {!isFull && scenario !== "sequential_10" && <p className="muted">Одновременная отправка не означает выполнение всех 10 задач в один момент. Очередь сохраняет задания, а число выполняемых задач ограничено рабочими процессами и доступной памятью CPU/GPU.</p>}
         <div className="b1-form-grid">
+          {!isFull && <label>Лимит ожидания одного запроса, с<input type="number" min={30} max={3600} step={1} value={timeoutInput} onChange={event => setTimeoutInput(event.target.value)} disabled={busy || active} aria-invalid={!validTimeout} />
+            <small>От 30 до 3600 с. Для долгого диагностического запуска можно указать 600 с. Это увеличивает ожидание результата, а не скорость обработки. Сравнивайте серии с одинаковым лимитом.</small>
+          </label>}
           {isFull && <label>Фоновая обработка (обязательно)<select value={backgroundId} onChange={event => setBackgroundId(event.target.value)} disabled={busy || active}>
             <option value="">Без фоновой обработки</option>
             {config.data.background_sessions.map(item => <option key={item.session_id} value={item.session_id}>{item.title}</option>)}
@@ -191,11 +209,12 @@ export function B1ExperimentPanel() {
       {selectedId && !experiment && !pollError && <Loading />}
       {experiment && <>
         <div className="row between wrap"><div><h3>{experiment.title || "Эксперимент B1"}</h3><small>{experiment.id}</small></div><strong role="status">{statuses[experiment.status] || experiment.status}</strong></div>
+        <p className="muted">{scenarios[experiment.scenario]?.title || experiment.scenario}{typeof experiment.protocol?.timeout_seconds === "number" && <> · лимит ожидания запроса: {number(experiment.protocol.timeout_seconds, "с")}</>}</p>
         <Notice title={experiment.scope === "confirmation" ? "Подтверждающая кампания" : "Диагностический результат"} tone={experiment.scope === "confirmation" ? "info" : "warning"}>
           {experiment.scope === "confirmation" ? "Статус «Завершён» означает окончание измерений. Вывод по B1 делается по парным результатам и критериям протокола." : "Этот запуск не подтверждает гипотезу: он проверяет работу сценария на малой выборке."}
         </Notice>
         <Progress value={experiment.progress ?? current?.progress ?? 0} />
-        {current && <div className="b1-run-facts"><p><strong>{phases[current.phase] || current.phase}</strong> · {profileLabel(current.routing_mode)} · прошло {number(current.elapsed_seconds, "с")}</p><p>Запланировано: {current.scheduled} · начато: {current.started} · завершено: {current.completed} · успешно: {current.success} · ошибок: {current.failed} · не запущено по расписанию: {current.missed}</p></div>}
+        {current && <div className="b1-run-facts"><p><strong>{phases[current.phase] || current.phase}</strong> · {profileLabel(current.routing_mode)} · прошло {number(current.elapsed_seconds ?? summary?.elapsed_seconds ?? (current.phase === "COMPLETED" ? summary?.scenario_makespan_seconds : undefined), "с")}</p><p>Запланировано: {number(count("scheduled"))} · начато: {number(started)} · завершено: {number(completed)} · успешно: {number(count("success"))} · ошибок: {number(count("failed"))} · не запущено по расписанию: {number(count("missed"))}</p><p>Ожидают результата: {number(inflight)}. Этот счётчик включает ожидание в очереди.</p></div>}
         {experiment.error && <ErrorBox message={experiment.error} />}
         {experiment.status === "AWAITING_PROFILE" && <Notice title={`Нужна конфигурация: ${profileLabel(experiment.expected_routing_mode)}`} tone="warning">
           Переключите конфигурацию и перезапустите рабочие процессы по инструкции запуска. После обновления режима нажмите «Продолжить измерение». Текущая конфигурация: {profileLabel(config.data?.routing_mode)}.
@@ -206,7 +225,7 @@ export function B1ExperimentPanel() {
           {experiment.plan.map(run => <tr key={run.index}><td>{run.index + 1}</td><td>{run.pair_index}</td><td>{profileLabel(run.routing_mode)}</td><td>{statuses[run.status] || run.status}</td><td>{number(run.summary?.p95_seconds)}</td><td>{percentage(run.summary?.error_rate)}</td><td>{number(run.summary?.batch_rows_per_minute)}</td></tr>)}
         </tbody></table></ScrollArea></details>}
         <div className="row wrap">
-          {canContinue && <button className="btn btn-primary" disabled={busy || config.data?.routing_mode !== pendingMode} onClick={() => void act(async () => { setExperiment(await b1Api.continue(experiment.id)); setPollVersion(value => value + 1); history.refresh(); })}>Продолжить измерение</button>}
+          {canContinue && <button className="btn btn-primary" disabled={busy || config.data?.routing_mode !== pendingMode || (experiment.scope === "confirmation" && diagnosticRuntime)} onClick={() => void act(async () => { setExperiment(await b1Api.continue(experiment.id)); setPollVersion(value => value + 1); history.refresh(); })}>Продолжить измерение</button>}
           {(!terminal.has(experiment.status) || experiment.status === "INTERRUPTED") && <button className="btn btn-danger" disabled={busy} onClick={() => void act(async () => { setExperiment(await b1Api.cancel(experiment.id)); history.refresh(); })}>Остановить эксперимент</button>}
           {(["json", "csv", "zip"] as const).map(format => <button key={format} className="btn" disabled={busy} onClick={() => void act(() => saveDownload(b1Api.exportPath(experiment.id, format), `b1-${experiment.id}.${format}`))}>Скачать {format.toUpperCase()}</button>)}
         </div>

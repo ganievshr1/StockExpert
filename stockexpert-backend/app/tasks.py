@@ -10,7 +10,7 @@ from app.services.llm import LLMTemporaryError
 from app.services import llm,model_registry,taxonomy,normalization_engine
 from app.services.execution import Execution,Cancelled,ACTIVE_STATUSES
 from app.services.workflow import prepare,normalize_all,match_all
-from app.services import job_telemetry
+from app.services import job_telemetry, reranker_runtime
 from app.services.job_routing import (queue_for_job, prepared_base_id, TASK_ROUTES,
                                      SHARED_QUEUE, CONTROL_QUEUE, LABORATORY_QUEUE, REGEX_QUEUE, B1_QUEUE)
 
@@ -56,6 +56,14 @@ def run_regex_experiment(ident):
     from app.services.regex_experiments import run_experiment
     run_experiment(ident)
 
+def record_reranker_runtime(job):
+    """Save process configuration and this job's actual inference devices."""
+    runtime = dict(job.params.get('runtime', {}))
+    runtime['reranker_execution'] = {**reranker_runtime.runtime_config(),
+                                     'job_usage': reranker_runtime.job_usage()}
+    job.params = {**job.params, 'runtime': runtime}
+
+
 @celery_app.task(name='stockexpert.run',bind=True,max_retries=2)
 def run_job(self,jid):
     redis=Redis.from_url(settings.REDIS_URL)
@@ -65,6 +73,8 @@ def run_job(self,jid):
         lock=redis.lock('session:'+job.session_id,timeout=900,blocking_timeout=1)
         if not lock.acquire(blocking=True): return
         execution=None
+        matching_attempted=False
+        reranker_runtime.reset_job_usage()
         try:
             s=db.scalar(select(ProcurementSession).where(ProcurementSession.id==job.session_id).with_for_update())
             if s is None:return
@@ -95,13 +105,18 @@ def run_job(self,jid):
                 if normalization_engine.needs_llm(job.kind,h1['method'],s.taxonomy_enabled):model_registry.preflight(config)
                 if job.kind=='prepare': prepare(db,s,job,tick)
                 elif job.kind=='normalize': normalize_all(db,s,job,tick)
-                elif job.kind=='match': match_all(db,s,job,tick)
+                elif job.kind=='match':
+                    matching_attempted=True
+                    match_all(db,s,job,tick)
                 elif job.kind=='full':
                     normalize_all(db,s,job,tick)
-                    if s.approved:match_all(db,s,job,tick)
+                    if s.approved:
+                        matching_attempted=True
+                        match_all(db,s,job,tick)
                     else:job.kind='normalize'  # Completed H1/H2 is not a completed matching run.
                 elif job.kind=='taxonomy':taxonomy.build(db,s,job,tick)
                 else: raise ValueError('Unknown job type')
+            if matching_attempted:record_reranker_runtime(job)
             db.scalar(select(ProcurementSession.id).where(ProcurementSession.id==s.id).with_for_update())
             execution.check();execution.finish('COMPLETED')
             # Serialize final status with cancel requests.
@@ -122,6 +137,7 @@ def run_job(self,jid):
             db.rollback()
             if execution:execution.finish('CANCELLED')
             job=db.get(Job,jid);job.status='CANCELLED';job.stage='CANCELLED';job.error=None
+            if matching_attempted:record_reranker_runtime(job)
             job_telemetry.finished(job,'CANCELLED')
             s=db.get(ProcurementSession,job.session_id);s.status='CANCELLED'
             record(db,s.id,'SESSION_CANCELLED',{'job_id':jid});db.commit()
@@ -129,6 +145,7 @@ def run_job(self,jid):
             db.rollback()
             if execution:execution.finish('FAILED')
             job=db.get(Job,jid)
+            if matching_attempted:record_reranker_runtime(job)
             transient=isinstance(exc,(ConnectionError,TimeoutError,LLMTemporaryError)) or type(exc).__module__.startswith(('httpx','httpcore','minio','urllib3'))
             cancelled=db.scalar(select(Job.status).where(Job.id==jid))=='CANCEL_REQUESTED'
             retry=not cancelled and transient and self.request.retries<self.max_retries

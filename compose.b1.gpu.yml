@@ -1,0 +1,17 @@
+# Only one threaded matching worker loads the CUDA reranker.
+# Ollama retains its existing configuration and shares the physical GPU.
+services:
+  worker:
+    build:
+      context: .
+      args:
+        TORCH_FLAVOR: cu126
+    environment:
+      RERANKER_DEVICE: auto
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]

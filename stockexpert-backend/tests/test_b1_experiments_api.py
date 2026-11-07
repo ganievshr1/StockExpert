@@ -99,7 +99,7 @@ def test_config_lists_ready_sources_and_fixed_protocol(client, auth, experiment_
     source["publish"].assert_not_called()
 
 
-@pytest.mark.parametrize("scenario", ["concurrent_10", "sequential_10"])
+@pytest.mark.parametrize("scenario", ["concurrent_10", "sequential_10", "single_user_parallel"])
 def test_diagnostic_create_persists_plan_and_publishes_controller(
     client, auth, experiment_source, scenario,
 ):
@@ -185,6 +185,43 @@ def test_client_cannot_silently_override_fixed_protocol(client, auth, experiment
     experiment_source["publish"].assert_not_called()
 
 
+def test_diagnostic_timeout_is_saved_per_experiment_without_mutating_protocol(client, auth, experiment_source):
+    response = client.post(PREFIX + '/experiments', headers=auth,
+        json=_payload(experiment_source, 'single_user_parallel', diagnostic_timeout_seconds=600))
+    assert response.status_code == 202, response.text
+    assert response.json()['protocol']['timeout_seconds'] == 600
+    assert service.PROTOCOL['timeout_seconds'] == 120
+    default = _create(client, auth, experiment_source, 'sequential_10')
+    assert default['protocol']['timeout_seconds'] == 120
+
+
+@pytest.mark.parametrize('timeout', [0, 29, 3601, 120.5, '600', True])
+def test_invalid_diagnostic_timeout_rejected(client, auth, experiment_source, timeout):
+    response = client.post(PREFIX + '/experiments', headers=auth,
+        json=_payload(experiment_source, 'single_user_parallel', diagnostic_timeout_seconds=timeout))
+    assert response.status_code == 422
+    experiment_source['publish'].assert_not_called()
+
+
+def test_confirmation_rejects_extended_timeout_before_preparing_inputs(client, auth, experiment_source):
+    response = client.post(PREFIX + '/experiments', headers=auth,
+        json=_payload(experiment_source, 'confirmation', diagnostic_timeout_seconds=600))
+    assert response.status_code == 422
+    assert 'фиксированный таймаут' in response.text
+    experiment_source['publish'].assert_not_called()
+
+
+def test_parallel_runtime_is_reported_and_confirmation_rejected_before_setup(client, auth, experiment_source, monkeypatch):
+    monkeypatch.setenv('B1_RUNTIME_PROFILE', 'parallel')
+    options = client.get(PREFIX + '/config', headers=auth)
+    assert options.status_code == 200
+    assert options.json()['runtime_profile'] == 'parallel'
+    response = client.post(PREFIX + '/experiments', headers=auth,
+        json=_payload(experiment_source, 'confirmation'))
+    assert response.status_code == 422 and 'профиль standard' in response.text
+    experiment_source['publish'].assert_not_called()
+
+
 @pytest.mark.parametrize("role", ["buyer", "dmto_expert"])
 def test_b1_developer_endpoints_require_admin(client, auth, experiment_source, role):
     source = experiment_source
@@ -221,7 +258,7 @@ def test_foreign_admin_cannot_use_sources_or_manage_experiment(client, auth, exp
     assert source["publish"].call_count == 1
 
 
-@pytest.mark.parametrize("scenario", ["concurrent_10", "sequential_10"])
+@pytest.mark.parametrize("scenario", ["concurrent_10", "sequential_10", "single_user_parallel"])
 def test_diagnostic_cannot_reference_a_foreign_background_manifest(
     client, auth, experiment_source, scenario,
 ):

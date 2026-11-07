@@ -5,7 +5,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends fonts-dejavu-co
 COPY requirements.txt requirements-ml.txt constraints.txt ./
 RUN pip install --no-cache-dir -c constraints.txt -r requirements.txt
 ARG INSTALL_RERANKER=true
-RUN if [ "$INSTALL_RERANKER" = "true" ]; then pip install --no-cache-dir torch==2.7.0 --index-url https://download.pytorch.org/whl/cpu && pip install --no-cache-dir -c constraints.txt -r requirements-ml.txt; fi
+ARG TORCH_FLAVOR=cpu
+RUN case "$TORCH_FLAVOR" in cpu|cu126) ;; *) echo "TORCH_FLAVOR must be cpu or cu126" >&2; exit 1;; esac; \
+    if [ "$INSTALL_RERANKER" = "true" ]; then pip install --no-cache-dir torch==2.7.0 --index-url "https://download.pytorch.org/whl/$TORCH_FLAVOR" && pip install --no-cache-dir -c constraints.txt -r requirements-ml.txt; fi
 COPY . .
 RUN useradd -m -u 10001 appuser && mkdir -p /models/huggingface /data/b1 && chown -R appuser:appuser /models /app /data/b1
 USER appuser

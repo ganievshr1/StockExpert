@@ -19,7 +19,9 @@ def parser():
     sub = p.add_subparsers(dest='action', required=True)
     sub.add_parser('config'); sub.add_parser('list')
     create = sub.add_parser('create')
-    create.add_argument('--scenario', choices=['concurrent_10', 'sequential_10', 'confirmation'], required=True)
+    create.add_argument('--scenario', choices=['concurrent_10', 'sequential_10', 'single_user_parallel', 'confirmation'], required=True)
+    create.add_argument('--diagnostic-timeout-seconds', type=int, default=120,
+                        help='Diagnostic request deadline, 30–3600 s; confirmation stays at 120 s')
     create.add_argument('--base-session', required=True)
     create.add_argument('--requirements-session', required=True)
     create.add_argument('--background-session')
@@ -60,7 +62,8 @@ def main(argv=None):
             elif action == 'create':
                 payload = {'scenario': args.scenario, 'base_session_id': args.base_session,
                            'requirement_session_id': args.requirements_session,
-                           'background_session_id': args.background_session, 'campaign_title': args.title}
+                           'background_session_id': args.background_session, 'campaign_title': args.title,
+                           'diagnostic_timeout_seconds': args.diagnostic_timeout_seconds}
                 result = checked(client.post(base + '/experiments', json=payload)).json()
             else:
                 path = base + '/experiments/' + args.experiment_id

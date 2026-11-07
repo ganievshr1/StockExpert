@@ -47,6 +47,9 @@ class Settings(BaseSettings):
     EMBEDDING_MODEL: str = 'bge-m3'
     RERANKER_MODEL: str = 'cross-encoder/mmarco-mMiniLMv2-L12-H384-v1'
     RERANKER_ENABLED: bool = True
+    RERANKER_DEVICE: Literal['cpu', 'cuda', 'auto'] = 'cpu'
+    RERANKER_BATCH_SIZE: int = Field(default=8, ge=1, le=64)
+    RERANKER_CPU_FALLBACK: bool = True
     SPLADE_MODEL_PATH: str = ''
     LLM_TIMEOUT: int = 180
     MAX_UPLOAD_BYTES: int = 20971520

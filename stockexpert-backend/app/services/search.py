@@ -1,5 +1,4 @@
 import re,hashlib
-from functools import lru_cache
 from qdrant_client import QdrantClient, models
 from qdrant_client.http.exceptions import UnexpectedResponse
 from rank_bm25 import BM25Okapi
@@ -53,14 +52,13 @@ def retrieve(sid,query,items,limit=500):
     for ranking in ([str(p.id) for p in dense],[items[i].id for i in sparse if scores[i]>0]):
         for rank,ident in enumerate(ranking,1): fused[ident]=fused.get(ident,0)+1/(60+rank)
     return dict(sorted(fused.items(),key=lambda pair:pair[1],reverse=True)[:limit])
-@lru_cache(maxsize=1)
 def reranker():
-    from sentence_transformers import CrossEncoder
-    return CrossEncoder(settings.RERANKER_MODEL,device='cpu',max_length=512,trust_remote_code=False)
+    from app.services.reranker_runtime import get_runtime
+    return get_runtime().load()
 def rerank(query,items):
     if not items: return {}
     if not settings.RERANKER_ENABLED: return {}  # explicit degraded mode, not fabricated scores
-    scores=reranker().predict([(query,i.source_text) for i in items],batch_size=8,show_progress_bar=False)
+    scores=reranker().predict([(query,i.source_text) for i in items])
     return {i.id:float(s) for i,s in zip(items,scores)}
 
 def delete_session_index(sid):

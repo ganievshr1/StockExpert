@@ -186,6 +186,7 @@ def session_options(db, user):
             backgrounds.append(dict(session_id=session.id, title=session.title, residual_rows=residual))
     excluded = {session.id for session in sessions if session.base_snapshot.get('b1_experiment_id')}
     return dict(routing_mode=mode(), ready_bases=[row for row in bases(200, 0, db, user) if row['session_id'] not in excluded],
+                runtime_profile=os.getenv('B1_RUNTIME_PROFILE', 'standard'),
                 requirement_sessions=requirements, background_sessions=backgrounds, protocol=PROTOCOL,
                 note='Короткие сценарии диагностические. Полный протокол требует пяти пар shared/split и отдельной фоновой подготовки. Режим очередей меняется через развёртывание.')
 
@@ -200,6 +201,8 @@ def schema_signature(session):
 def validate_inputs(db, user, payload):
     from app.api.deps import own_session
     from app.services.bases import normalized_rows
+    if payload['scenario'] == 'confirmation' and os.getenv('B1_RUNTIME_PROFILE', 'standard') != 'standard':
+        raise HTTPException(422, 'Полный протокол B1 требует профиль standard; parallel/GPU применяется только к диагностике')
     base = own_session(db, payload['base_session_id'], user)
     source = own_session(db, payload['requirement_session_id'], user)
     if payload.get('background_session_id'):
@@ -241,6 +244,9 @@ def create(db, user, payload):
     base, requirements, count = validate_inputs(db, user, payload)
     ident = str(uuid.uuid4())
     confirmation = payload['scenario'] == 'confirmation'
+    protocol = dict(PROTOCOL)
+    if not confirmation:
+        protocol['timeout_seconds'] = payload.get('diagnostic_timeout_seconds', PROTOCOL['timeout_seconds'])
     plan = []
     for pair in range(1, 6) if confirmation else [1]:
         profiles = (['shared', 'split'] if pair % 2 else ['split', 'shared']) if confirmation else [mode()]
@@ -255,7 +261,7 @@ def create(db, user, payload):
                  requirement_ids=[row.id for row in requirements],
                  background_session_id=payload.get('background_session_id'),
                  schema_sha256=schema_signature(base), pool=[], actors=[], background_pool=[], cancel_requested=False,
-                 protocol=PROTOCOL, measurement_kind='real_http_and_real_pipeline',
+                 protocol=protocol, measurement_kind='real_http_and_real_pipeline',
                  note='Диагностический сценарий не подтверждает B1' if not confirmation else
                  'Пять пар запусков. Между режимами оператор меняет профиль workers и нажимает Продолжить. Подготовка пула не входит в измерение.')
     save(ident, initial=value)
@@ -347,7 +353,7 @@ def prepare_pool(ident, should_stop=None):
     with SessionLocal() as db:
         admin = db.get(User, value['requested_by'])
         base = db.get(ProcurementSession, value['base_session_id'])
-        users = 1 if value['scenario'] == 'sequential_10' else 10
+        users = 1 if value['scenario'] in ('sequential_10', 'single_user_parallel') else 10
         actors = list(value['actors'])
         for index in range(len(actors), users):
             actor = User(username=f'b1_{ident.replace("-", "")}_{index}',
@@ -488,9 +494,9 @@ async def request_job(client, slot, index, run, scheduled, ident, phase):
     sid = slot['session_id']
     row = dict(run_index=run_index, attempt_id=attempt_id, phase=phase, number=index, account=slot['account'], session_id=sid,
                request_id=request_id, started_at=utc(), start_lag_ms=(start - scheduled) * 1000,
-               outcome='CLIENT_ERROR')
+               outcome='CLIENT_ERROR', timeout_seconds=run.get('timeout_seconds', PROTOCOL['timeout_seconds']))
     try:
-        async with asyncio.timeout(PROTOCOL['timeout_seconds']):
+        async with asyncio.timeout(row['timeout_seconds']):
             response = await client.post(f'matching/{sid}/run', json={'target_shortlist_size': 150},
                                          headers={'X-Test-Run-ID': ident, 'X-Request-ID': request_id})
             row['accept_seconds'] = time.monotonic() - start
@@ -507,6 +513,7 @@ async def request_job(client, slot, index, run, scheduled, ident, phase):
                 if status['status'] in TERMINAL:
                     row['outcome'] = status['status']
                     row['execution_metrics'] = status.get('params', {}).get('execution_metrics', {})
+                    row['reranker_execution'] = status.get('params', {}).get('runtime', {}).get('reranker_execution', {})
                     break
                 await asyncio.sleep(PROTOCOL['poll_seconds'])
             if row['outcome'] == 'COMPLETED':
@@ -546,6 +553,10 @@ async def request_job(client, slot, index, run, scheduled, ident, phase):
 def preflight(ident):
     from app.tasks import celery_app
     from app.services.job_routing import routing_metadata
+    confirmation = load(ident)['scope'] == 'confirmation'
+    runtime_profile = os.getenv('B1_RUNTIME_PROFILE', 'standard')
+    if confirmation and runtime_profile != 'standard':
+        raise ValueError('Полный протокол B1 требует профиль standard; parallel/GPU применяется только к диагностике')
     with SessionLocal() as db:
         if db.scalar(select(Job.id).where(Job.status.in_(ACTIVE_STATUSES)).limit(1)):
             raise ValueError('Перед запуском стенд должен быть свободен: обнаружено активное задание')
@@ -562,20 +573,31 @@ def preflight(ident):
         if len(selected) != 1 or name not in statistics:
             raise ValueError('Не удалось подтвердить однозначное распределение business workers')
         concurrency = statistics[name].get('pool', {}).get('max-concurrency')
-        if concurrency != 1:
+        if not isinstance(concurrency, int) or isinstance(concurrency, bool) or concurrency < 1:
+            raise ValueError('Worker не сообщил положительное число рабочих слотов')
+        if confirmation and concurrency != 1:
             raise ValueError('B1 требует два отдельных business workers с concurrency=1')
         allocation[selected[0]] += concurrency
         workers.append({'name': name, 'queue': selected[0], 'slots': concurrency})
     expected = {'shared': 2, 'interactive': 0, 'batch': 0} if mode() == 'shared' else {'shared': 0, 'interactive': 1, 'batch': 1}
-    if allocation != expected:
+    valid_allocation = allocation == expected if confirmation else (
+        allocation['shared'] >= 1 and not allocation['interactive'] and not allocation['batch'] if mode() == 'shared'
+        else allocation['interactive'] >= 1 and allocation['batch'] >= 1 and not allocation['shared'])
+    if not valid_allocation:
         raise ValueError(f'Фактические подписки workers не соответствуют {mode()}: {allocation}; ожидается {expected}')
-    evidence = dict(at=utc(), routing=routing_metadata(), actual_workers=workers)
+    evidence = dict(at=utc(), routing=routing_metadata(), actual_workers=workers,
+                    actual_allocation=allocation, actual_slots=sum(allocation.values()),
+                    runtime_profile=runtime_profile,
+                    controller_reranker_requested_device=getattr(settings, 'RERANKER_DEVICE', 'cpu'),
+                    reranker_device_evidence='Authoritative execution devices are in each request reranker_execution; controller configuration is not worker configuration',
+                    budget_policy='fixed_two_slots' if confirmation else 'diagnostic_observed_slots')
     append(ident, 'environment.jsonl', evidence)
     return evidence
 
 
 async def execute_run(ident, run, should_stop=None, controller_token=None):
     value = load(ident)
+    run = {**run, 'timeout_seconds': value.get('protocol', {}).get('timeout_seconds', PROTOCOL['timeout_seconds'])}
     slots = deepcopy(value['pool']); records = []
     created_at = datetime.now(timezone.utc)
     clients = {}
@@ -598,6 +620,23 @@ async def execute_run(ident, run, should_stop=None, controller_token=None):
         tasks = []
         measured = False
         background_samples = []
+        # Started requests must be visible before their potentially long result wait.
+        # Summary(records) alone only knows requests that have already finished.
+        progress_phase = 'WARMUP' if confirmation else 'MEASURING'
+        planned = PROTOCOL['requests_per_run'] if confirmation else 10
+        counts = {'scheduled': 0, 'started': 0}
+        async def publish_progress():
+            rows = [row for row in records if row['phase'] == 'MEASURING']
+            summary = summarize(rows)
+            completed = sum(row['outcome'] != 'GENERATOR_MISSED' for row in rows)
+            summary.update(scheduled=counts['scheduled'], started=counts['started'],
+                           completed=completed, inflight=counts['started'] - completed,
+                           planned=planned)
+            await asyncio.to_thread(save, ident, dict(heartbeat_at=utc(), current_run={
+                **run, 'phase': progress_phase, **summary,
+                'elapsed_seconds': time.monotonic() - origin,
+                'progress': round(len(rows) / planned * 100), 'summary': summary}),
+                expected_controller=controller_token)
         monitor_stop = asyncio.Event()
         async def monitor():
             while not monitor_stop.is_set():
@@ -615,13 +654,18 @@ async def execute_run(ident, run, should_stop=None, controller_token=None):
                     count, active = await asyncio.to_thread(background_snapshot, value['background_pool'], created_at)
                     if measured:
                         background_samples.append({'at': utc(), 'rows': count, 'active': active})
+                await publish_progress()
                 await asyncio.sleep(MONITOR_SECONDS)
         monitor_task = asyncio.create_task(monitor())
         async def one(slot, number, when, phase):
+            if phase == 'MEASURING':
+                counts['started'] += 1
             row = await request_job(clients[slot['user_id']], slot, number, run, when, ident, phase)
             records.append(row)
         async def phase(name, count, interval, sequential=False):
-            start = time.monotonic(); last_progress = start
+            nonlocal progress_phase
+            progress_phase = name
+            start = time.monotonic()
             for number in range(count):
                 if stopping():
                     break
@@ -629,7 +673,9 @@ async def execute_run(ident, run, should_stop=None, controller_token=None):
                 await asyncio.sleep(max(0, scheduled - time.monotonic()))
                 if stopping():
                     break
-                account = 0 if value['scenario'] == 'sequential_10' else number % 10
+                if name == 'MEASURING':
+                    counts['scheduled'] += 1
+                account = 0 if value['scenario'] in ('sequential_10', 'single_user_parallel') else number % 10
                 choices = [slot for slot in slots if slot['account'] == account and not slot['busy']]
                 lag = (time.monotonic() - scheduled) * 1000
                 if not choices or lag > PROTOCOL['max_start_lag_ms']:
@@ -637,18 +683,11 @@ async def execute_run(ident, run, should_stop=None, controller_token=None):
                                attempt_id=run['attempt_id'], reason='pool_exhausted' if not choices else 'start_lag', start_lag_ms=lag)
                     records.append(row); await asyncio.to_thread(append, ident, 'raw.jsonl', row)
                 else:
-                    slot = next((candidate for candidate in choices if candidate.get('ordinal') == number), choices[0]) if sequential else choices[0]
+                    slot = next((candidate for candidate in choices if candidate.get('ordinal') == number), choices[0]) if value['scenario'] in ('sequential_10', 'single_user_parallel') else choices[0]
                     slot['busy'] = True
                     task = asyncio.create_task(one(slot, number, scheduled, name)); tasks.append(task)
                     if sequential:
                         await task
-                measured = [row for row in records if row['phase'] == 'MEASURING']
-                summary = summarize(measured)
-                if time.monotonic() - last_progress >= 1 or number == count - 1:
-                    await asyncio.to_thread(save, ident, dict(heartbeat_at=utc(), current_run={**run, 'phase': name,
-                        **summary, 'completed': len(measured), 'elapsed_seconds': time.monotonic() - origin,
-                        'progress': round((number + 1) / count * 100), 'summary': summary}), expected_controller=controller_token)
-                    last_progress = time.monotonic()
             if interval:
                 while time.monotonic() < start + count * interval and not stopping():
                     await asyncio.sleep(min(.25, max(0, start + count * interval - time.monotonic())))
@@ -665,19 +704,27 @@ async def execute_run(ident, run, should_stop=None, controller_token=None):
         else:
             await phase('MEASURING', 10, 0, value['scenario'] == 'sequential_10')
             before_rows = after_rows = active = 0; measured_seconds = time.monotonic() - origin
-        monitor_stop.set(); monitor_task.cancel()
-        try:
-            await monitor_task
-        except asyncio.CancelledError:
-            pass
-        await asyncio.to_thread(save, ident, dict(current_run={**(load(ident)['current_run'] or run), 'phase': 'DRAINING'}), expected_controller=controller_token)
+        progress_phase = 'DRAINING'
+        await publish_progress()
         if confirmation:
             cancel_background(ident)
-        await asyncio.gather(*tasks)
+        try:
+            await asyncio.gather(*tasks)
+        finally:
+            monitor_stop.set(); monitor_task.cancel()
+            try:
+                await monitor_task
+            except asyncio.CancelledError:
+                pass
+        elapsed = time.monotonic() - origin
+        if not confirmation:
+            measured_seconds = elapsed
         result = summarize([row for row in records if row['phase'] == 'MEASURING'])
         result.update(batch_rows_per_minute=(after_rows - before_rows) / (measured_seconds / 60) if confirmation else None,
                       batch_rows=after_rows - before_rows, measurement_seconds=measured_seconds,
-                      scenario_makespan_seconds=time.monotonic() - origin,
+                      scenario_makespan_seconds=elapsed, elapsed_seconds=elapsed,
+                      completed=result['started'], inflight=0, planned=planned,
+                      timeout_seconds=run['timeout_seconds'],
                       scope=value['scope'], confirmed=False if not confirmation else None,
                       reason='Диагностический сценарий; не проверка гипотезы B1' if not confirmation else 'Ожидаются все пять пар')
         if confirmation:
@@ -699,6 +746,9 @@ async def execute_run(ident, run, should_stop=None, controller_token=None):
             result.update(valid=False, reason='Во время эксперимента запущена посторонняя обработка на стенде')
         if stopping():
             result.update(valid=False, reason='Запуск прерван оператором или остановкой контроллера')
+        await asyncio.to_thread(save, ident, dict(current_run={**run, **result,
+            'phase': 'COMPLETED', 'progress': round(result['scheduled'] / planned * 100),
+            'summary': result}), expected_controller=controller_token)
         return result
 
 
@@ -775,7 +825,7 @@ def run_experiment(ident):
         save(ident, dict(plan=plan, status='INTERRUPTED' if lost.is_set() else 'CANCELLED' if value.get('cancel_requested') else 'AWAITING_PROFILE' if pending else 'COMPLETED',
             progress=round(sum(row['status'] == 'COMPLETED' for row in plan) / len(plan) * 100),
             expected_routing_mode=pending['routing_mode'] if pending else None,
-            current_run={**run, 'phase': 'COMPLETED', 'summary': summary},
+            current_run={**run, **summary, 'phase': 'COMPLETED', 'summary': summary},
             summary=campaign_summary(plan) if value['scope'] == 'confirmation' else summary), expected_controller=controller_token)
     except Exception as exc:
         value = load(ident)
@@ -797,7 +847,7 @@ def export(ident, format):
         return json.dumps(value, ensure_ascii=False, indent=2).encode(), 'application/json', 'json'
     if format == 'csv':
         output = io.StringIO(); fields = ['run_index', 'attempt_id', 'phase', 'number', 'account', 'session_id', 'job_id', 'outcome',
-                                         'start_lag_ms', 'accept_seconds', 'total_seconds', 'result_count', 'result_sha256']
+                                         'start_lag_ms', 'accept_seconds', 'total_seconds', 'timeout_seconds', 'result_count', 'result_sha256']
         writer = csv.DictWriter(output, fieldnames=fields, extrasaction='ignore', delimiter=';'); writer.writeheader()
         path = directory(ident) / 'raw.jsonl'
         if path.exists():

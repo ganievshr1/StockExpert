@@ -248,6 +248,89 @@ def test_sequential_diagnostic_uses_ten_distinct_requirements(runtime, monkeypat
     assert result['scenario_makespan_seconds'] >= .01
 
 
+def test_single_user_parallel_starts_all_ten_before_any_completes_and_keeps_progress_live(runtime, monkeypatch):
+    ident, value = runtime
+    for index, slot in enumerate(value['pool'][:10]):
+        slot.update(account=0, user_id=value['actors'][0], ordinal=index)
+    service.save(ident, dict(scope='diagnostic', scenario='single_user_parallel',
+        actors=value['actors'][:1], pool=value['pool'][:10], background_pool=[],
+        protocol={'timeout_seconds': 600}))
+    monkeypatch.setattr(service, 'MONITOR_SECONDS', .005)
+    seen, snapshots = [], []
+    release = asyncio.Event()
+    async def request(client, slot, index, run, scheduled, ident, phase):
+        assert run['timeout_seconds'] == 600
+        seen.append((slot['session_id'], slot['user_id'], slot['account'], id(client)))
+        await release.wait()
+        assert len(seen) == 10
+        slot['busy'] = False
+        return dict(phase=phase, outcome='COMPLETED', total_seconds=.03, start_lag_ms=1)
+    monkeypatch.setattr(service, 'request_job', request)
+    async def invoke():
+        task = asyncio.create_task(service.execute_run(ident, run_metadata()))
+        async with asyncio.timeout(2):
+            while True:
+                current = service.load(ident).get('current_run') or {}
+                if current.get('started') == 10 and current.get('elapsed_seconds', 0) >= .03:
+                    snapshots.append(current)
+                    release.set()
+                    break
+                await asyncio.sleep(.005)
+            return await task
+    result = asyncio.run(invoke())
+    assert len({row[0] for row in seen}) == 10
+    assert len({row[1:] for row in seen}) == 1  # one account, token and client
+    assert all(row['started'] == 10 and row['completed'] == 0 and row['inflight'] == 10 for row in snapshots)
+    assert all(row['elapsed_seconds'] >= .015 for row in snapshots)
+    assert result['success'] == result['completed'] == 10
+    assert result['timeout_seconds'] == 600 and result['inflight'] == 0
+    assert result['measurement_seconds'] == result['scenario_makespan_seconds']
+    final = service.load(ident)['current_run']
+    assert final['phase'] == 'COMPLETED'
+    assert final['started'] == final['completed'] == final['success'] == 10
+    assert final['elapsed_seconds'] >= .03
+
+
+def test_request_deadline_uses_run_override_and_records_it(runtime, monkeypatch):
+    ident, value = runtime
+    monkeypatch.setitem(service.PROTOCOL, 'timeout_seconds', .001)
+    async def response(request):
+        await asyncio.sleep(.005)
+        if request.method == 'POST':
+            return httpx.Response(202, json={'task_id': 'configured-timeout'})
+        if request.url.path.endswith('/status'):
+            return httpx.Response(200, json={'id': 'configured-timeout', 'status': 'COMPLETED',
+                'params': {'runtime': {'reranker_execution': {'device': 'cuda', 'calls': 1}}}})
+        return httpx.Response(200, json={'total': 0, 'items': []})
+    async def invoke():
+        async with httpx.AsyncClient(base_url='http://test/api/v1/', transport=httpx.MockTransport(response)) as client:
+            return await service.request_job(client, value['pool'][0], 0,
+                {**run_metadata(), 'timeout_seconds': 1}, time.monotonic(), ident, 'MEASURING')
+    result = asyncio.run(invoke())
+    assert result['outcome'] == 'COMPLETED' and result['timeout_seconds'] == 1
+    assert result['reranker_execution'] == {'device': 'cuda', 'calls': 1}
+
+
+def test_diagnostic_preflight_records_parallel_slots_without_relaxing_confirmation(runtime, monkeypatch):
+    ident, _ = runtime
+    inspector = SimpleNamespace(
+        active_queues=lambda: {'interactive': [{'name': 'interactive'}], 'batch': [{'name': 'batch'}]},
+        stats=lambda: {'interactive': {'pool': {'max-concurrency': 4}}, 'batch': {'pool': {'max-concurrency': 1}}})
+    monkeypatch.setattr(tasks.celery_app.control, 'inspect', lambda **kwargs: inspector)
+    service.save(ident, dict(scope='diagnostic', scenario='single_user_parallel'))
+    monkeypatch.setenv('B1_RUNTIME_PROFILE', 'parallel')
+    evidence = service.preflight(ident)
+    assert evidence['actual_slots'] == 5
+    assert evidence['actual_allocation'] == {'shared': 0, 'interactive': 4, 'batch': 1}
+    assert evidence['budget_policy'] == 'diagnostic_observed_slots'
+    service.save(ident, dict(scope='confirmation', scenario='confirmation'))
+    with pytest.raises(ValueError, match='профиль standard'):
+        service.preflight(ident)
+    monkeypatch.setenv('B1_RUNTIME_PROFILE', 'standard')
+    with pytest.raises(ValueError, match='concurrency=1'):
+        service.preflight(ident)
+
+
 def test_stale_controller_is_retryable_but_cannot_overwrite_new_controller(runtime):
     ident, value = runtime
     old = (datetime.now(timezone.utc) - timedelta(seconds=121)).isoformat()
@@ -290,20 +373,21 @@ def test_campaign_cannot_confirm_with_biased_baseline_failures():
     assert service.campaign_summary(plan)['confirmed'] is False
 
 
-def test_prepared_ten_users_execute_real_api_and_pipeline_with_test_model_boundary(
-    client, auth, experiment_source, monkeypatch,
+@pytest.mark.parametrize('scenario,actor_count', [('concurrent_10', 10), ('single_user_parallel', 1)])
+def test_prepared_users_execute_real_api_and_pipeline_with_test_model_boundary(
+    client, auth, experiment_source, monkeypatch, scenario, actor_count,
 ):
     """Real SQL/API/worker code, tiny fixture and controlled model/vector dependencies."""
     from app.main import app
     source = experiment_source
     response = client.post('/api/v1/developer/b1/experiments', headers=auth, json=dict(
-        scenario='concurrent_10', base_session_id=source['base_id'],
+        scenario=scenario, base_session_id=source['base_id'],
         requirement_session_id=source['requirements_id']))
     assert response.status_code == 202
     ident = response.json()['id']
     service.prepare_pool(ident)
     value = service.load(ident)
-    assert len(value['actors']) == len(set(value['actors'])) == 10
+    assert len(value['actors']) == len(set(value['actors'])) == actor_count
     assert len(value['pool']) == len({row['session_id'] for row in value['pool']}) == 10
     with SessionLocal() as db:
         source_stock = db.scalar(select(Item.stock_id).where(Item.session_id == source['base_id'], Item.kind == 'residual', Item.row_index == 2))
@@ -338,7 +422,7 @@ def test_prepared_ten_users_execute_real_api_and_pipeline_with_test_model_bounda
     assert result['success'] == 10, raw
     assert result['scope'] == 'diagnostic' and result['confirmed'] is False
     assert all(row['result_count'] == 1 and row['result_sha256'] for row in raw)
-    assert len({row['account'] for row in raw}) == 10
+    assert len({row['account'] for row in raw}) == actor_count
     service.clean_between_runs(ident)
     with SessionLocal() as db:
         assert not list(db.scalars(select(Match)))

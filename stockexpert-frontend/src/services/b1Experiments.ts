@@ -1,6 +1,6 @@
 import { request } from "./api";
 
-export type B1Scenario = "concurrent_10" | "sequential_10" | "confirmation";
+export type B1Scenario = "concurrent_10" | "sequential_10" | "single_user_parallel" | "confirmation";
 export type B1Profile = "shared" | "split";
 
 export interface B1SessionOption {
@@ -13,6 +13,7 @@ export interface B1SessionOption {
 
 export interface B1Config {
   routing_mode: B1Profile;
+  runtime_profile?: string;
   ready_bases: B1SessionOption[];
   requirement_sessions: B1SessionOption[];
   background_sessions: B1SessionOption[];
@@ -21,6 +22,11 @@ export interface B1Config {
 }
 
 export interface B1Summary {
+  scheduled?: number;
+  started?: number;
+  completed?: number;
+  missed?: number;
+  elapsed_seconds?: number;
   p95_seconds?: number | null;
   scenario_makespan_seconds?: number | null;
   error_rate?: number | null;
@@ -44,6 +50,7 @@ export interface B1Experiment {
   expected_routing_mode?: B1Profile;
   error?: string | null;
   summary?: B1Summary | null;
+  protocol?: { timeout_seconds?: number };
   plan?: {
     index: number;
     pair_index: number;
@@ -56,12 +63,13 @@ export interface B1Experiment {
     pair_index: number;
     routing_mode: B1Profile;
     phase: string;
-    scheduled: number;
-    started: number;
-    completed: number;
-    success: number;
-    failed: number;
-    missed: number;
+    scheduled?: number;
+    started?: number;
+    completed?: number;
+    success?: number;
+    failed?: number;
+    missed?: number;
+    inflight?: number;
     progress?: number;
     elapsed_seconds?: number;
     summary?: B1Summary | null;
@@ -74,6 +82,7 @@ export interface B1CreatePayload {
   requirement_session_id: string;
   background_session_id?: string;
   campaign_title?: string;
+  diagnostic_timeout_seconds?: number;
 }
 
 const root = "/developer/b1/experiments";

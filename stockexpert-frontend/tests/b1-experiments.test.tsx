@@ -48,7 +48,7 @@ describe("B1 real backend experiment", () => {
     expect(startButton().disabled).toBe(false);
     expect(screen.getByText('{"diameter":10}')).toBeTruthy();
     await userEvent.click(startButton());
-    await waitFor(() => expect(mocks.create).toHaveBeenCalledWith({ scenario: "concurrent_10", base_session_id: "base-12000", requirement_session_id: "needs-10" }));
+    await waitFor(() => expect(mocks.create).toHaveBeenCalledWith({ scenario: "concurrent_10", base_session_id: "base-12000", requirement_session_id: "needs-10", diagnostic_timeout_seconds: 120 }));
     expect(await screen.findByText("Диагностический результат")).toBeTruthy();
     expect(mocks.create).toHaveBeenCalledTimes(1);
   });
@@ -76,6 +76,97 @@ describe("B1 real backend experiment", () => {
     await userEvent.selectOptions(screen.getByLabelText("Фоновая обработка (обязательно)"), "background");
     await userEvent.click(startButton());
     await waitFor(() => expect(mocks.create).toHaveBeenCalledWith({ scenario: "confirmation", base_session_id: "base-12000", requirement_session_id: "needs-10", background_session_id: "background" }));
+  });
+
+  it("submits a single-user concurrent diagnostic with an explicit longer timeout", async () => {
+    render(<B1ExperimentPanel />);
+    await selectInputs();
+    await userEvent.selectOptions(screen.getByLabelText("Сценарий проверки"), "single_user_parallel");
+    expect(screen.getByText(/Одна учётная запись одновременно отправляет 10 запросов/)).toBeTruthy();
+    expect(screen.getByText(/Очередь сохраняет задания/)).toBeTruthy();
+    const timeout = screen.getByLabelText("Лимит ожидания одного запроса, с", { exact: false });
+    fireEvent.change(timeout, { target: { value: "600" } });
+    expect(startButton().disabled).toBe(false);
+    await userEvent.click(startButton());
+    await waitFor(() => expect(mocks.create).toHaveBeenCalledWith({
+      scenario: "single_user_parallel", base_session_id: "base-12000", requirement_session_id: "needs-10", diagnostic_timeout_seconds: 600,
+    }));
+  });
+
+  it("requires an integer diagnostic timeout in the backend range", async () => {
+    render(<B1ExperimentPanel />);
+    await selectInputs();
+    const timeout = screen.getByLabelText("Лимит ожидания одного запроса, с", { exact: false });
+    for (const value of ["", "29", "3601", "120.5"]) {
+      fireEvent.change(timeout, { target: { value } });
+      expect(startButton().disabled).toBe(true);
+      expect(timeout.getAttribute("aria-invalid")).toBe("true");
+    }
+    for (const value of ["30", "120", "3600"]) {
+      fireEvent.change(timeout, { target: { value } });
+      expect(startButton().disabled).toBe(false);
+    }
+    expect(mocks.create).not.toHaveBeenCalled();
+  });
+
+  it("keeps a diagnostic timeout override out of the confirmation payload", async () => {
+    render(<B1ExperimentPanel />);
+    await selectInputs();
+    fireEvent.change(screen.getByLabelText("Лимит ожидания одного запроса, с", { exact: false }), { target: { value: "600" } });
+    await userEvent.selectOptions(screen.getByLabelText("Сценарий проверки"), "confirmation");
+    expect(screen.queryByLabelText("Лимит ожидания одного запроса, с", { exact: false })).toBeNull();
+    await userEvent.selectOptions(screen.getByLabelText("Фоновая обработка (обязательно)"), "background");
+    await userEvent.click(startButton());
+    await waitFor(() => expect(mocks.create).toHaveBeenCalledWith({ scenario: "confirmation", base_session_id: "base-12000", requirement_session_id: "needs-10", background_session_id: "background" }));
+  });
+
+  it("limits the parallel runtime profile to diagnostics", async () => {
+    mocks.config.mockResolvedValue({ ...config, runtime_profile: "parallel" });
+    render(<B1ExperimentPanel />);
+    await selectInputs();
+    expect(screen.getByText("Параллельный профиль CPU/GPU")).toBeTruthy();
+    expect(screen.getByText(/нельзя сравнивать с прежним baseline как проверку B1/)).toBeTruthy();
+    expect(screen.getByRole<HTMLOptionElement>("option", { name: "Полный протокол: 5 пар baseline / split" }).disabled).toBe(true);
+    await userEvent.selectOptions(screen.getByLabelText("Сценарий проверки"), "single_user_parallel");
+    expect(startButton().disabled).toBe(false);
+  });
+
+  it("blocks a selected confirmation when the runtime profile changes to parallel", async () => {
+    render(<B1ExperimentPanel />);
+    await selectInputs();
+    await userEvent.selectOptions(screen.getByLabelText("Сценарий проверки"), "confirmation");
+    await userEvent.selectOptions(screen.getByLabelText("Фоновая обработка (обязательно)"), "background");
+    expect(startButton().disabled).toBe(false);
+    mocks.config.mockResolvedValue({ ...config, runtime_profile: "parallel" });
+    await userEvent.click(screen.getByRole("button", { name: "Обновить конфигурацию" }));
+    await screen.findByText("Параллельный профиль CPU/GPU");
+    expect(startButton().disabled).toBe(true);
+    expect(mocks.create).not.toHaveBeenCalled();
+  });
+
+  it("does not resume a confirmation campaign in the parallel runtime profile", async () => {
+    const awaiting: B1Experiment = { ...experiment, status: "AWAITING_PROFILE", scope: "confirmation", expected_routing_mode: "shared" };
+    mocks.config.mockResolvedValue({ ...config, runtime_profile: "parallel" });
+    mocks.list.mockResolvedValue({ items: [awaiting] });
+    mocks.detail.mockResolvedValue(awaiting);
+    render(<B1ExperimentPanel />);
+    expect((await screen.findByRole<HTMLButtonElement>("button", { name: "Продолжить измерение" })).disabled).toBe(true);
+    expect(mocks.continue).not.toHaveBeenCalled();
+  });
+
+  it("renders completed counters from a saved summary when old flattened fields are absent", async () => {
+    const saved: B1Experiment = { ...experiment, scenario: "single_user_parallel", protocol: { timeout_seconds: 600 }, current_run: {
+      index: 0, pair_index: 1, routing_mode: "shared", phase: "COMPLETED",
+      summary: { scheduled: 10, started: 10, completed: 10, success: 10, failed: 0, missed: 0, scenario_makespan_seconds: 700.732, error_rate: 0 },
+    } };
+    mocks.list.mockResolvedValue({ items: [saved] });
+    mocks.detail.mockResolvedValue(saved);
+    render(<B1ExperimentPanel />);
+    expect(await screen.findByText("Измерение завершено")).toBeTruthy();
+    expect(screen.getByText(/Запланировано: 10 · начато: 10 · завершено: 10 · успешно: 10 · ошибок: 0 · не запущено по расписанию: 0/)).toBeTruthy();
+    expect(screen.getByText(/Ожидают результата: 0/)).toBeTruthy();
+    expect(screen.getByText(/лимит ожидания запроса: 600 с/)).toBeTruthy();
+    expect(screen.getByText(/прошло 700,732 с/)).toBeTruthy();
   });
 
   it("keeps zero metrics distinct from unavailable values and exports server results", async () => {
@@ -112,7 +203,7 @@ describe("B1 real backend experiment", () => {
     await userEvent.selectOptions(screen.getByLabelText("Сценарий проверки"), "sequential_10");
     expect(screen.queryByLabelText("Фоновая обработка (обязательно)")).toBeNull();
     await userEvent.click(startButton());
-    await waitFor(() => expect(mocks.create).toHaveBeenCalledWith({ scenario: "sequential_10", base_session_id: "base-12000", requirement_session_id: "needs-10" }));
+    await waitFor(() => expect(mocks.create).toHaveBeenCalledWith({ scenario: "sequential_10", base_session_id: "base-12000", requirement_session_id: "needs-10", diagnostic_timeout_seconds: 120 }));
   });
 
   it("resumes an interrupted campaign and restarts polling after terminal status", async () => {
