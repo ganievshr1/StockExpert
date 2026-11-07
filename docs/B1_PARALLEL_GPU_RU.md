@@ -1,5 +1,39 @@
 # StockExpert 3.9.13-b1.2: один пользователь, десять одновременных запросов
 
+## Исправление запуска контейнеров — launcher revision 2
+
+Для текущего стенда закреплены проекты `stockexpert-backend` и
+`stockexpert-frontend`. Сохранённое ранее имя `stockexpert-backend-frontend`
+и переменные окружения с другими именами больше не выбирают иной проект.
+Остановленный `stockexpert-frontend` обнаруживается по Docker labels;
+прежний порт читается из конфигурации контейнера. Он подключается к
+существующей сети backend и инфраструктуры, даже если раньше использовал
+другую сеть. Адрес после запуска печатается по найденному порту.
+
+Если ошибочный `stockexpert-backend-frontend` работает, его frontend
+останавливается после успешной сборки и проверки отсутствия активных заданий.
+Контейнер остаётся на месте; удаления контейнеров, сетей и volumes нет.
+Другие проекты из Docker Desktop не затрагиваются.
+При ошибке запуска целевого frontend выполняется попытка вернуть ранее
+работавший дублирующий frontend; это не откат конфигурации backend.
+
+Исправленный архив называется `StockExpert_B1_parallel_GPU_fixed.zip`.
+Он устанавливается поверх 3.9.13-b1.1 и поверх уже применённого предыдущего
+патча 3.9.13-b1.2. Повторное применение не меняет уже совпадающие файлы.
+Старые проекты backend и инфраструктуры должны работать; frontend может
+быть остановлен. Пример установки из Downloads Windows:
+
+```bash
+(
+set -e
+b1_unpack="$(mktemp -d /home/ganie/StockExpertB1-fix-XXXXXX)"
+unzip -q /mnt/c/Users/ganie/Downloads/StockExpert_B1_parallel_GPU_fixed.zip -d "$b1_unpack"
+python3 "$b1_unpack/apply_update.py" /home/ganie/StockExpertB1
+cd /home/ganie/StockExpertB1
+bash b1-parallel.sh start gpu 4
+)
+```
+
 ## Что изменилось
 
 В разделе «Проверка гипотезы B1» появился отдельный сценарий
@@ -78,14 +112,14 @@ Baseline — конфигурация с общей очередью. 30% — з
 
 ## Установка обновления с сохранением данных
 
-Архив содержит исправление для версии 3.9.13-b1.1, выданной ранее вместе
-с режимом «одна строка TXT = одна потребность». Скопируйте архив
-`StockExpert_B1_parallel_GPU_patch.zip` в `/home/ganie/Downloads`.
+Архив подходит для версии 3.9.13-b1.1 с режимом «одна строка TXT = одна
+потребность» и для уже обновлённой 3.9.13-b1.2. Скопируйте архив
+`StockExpert_B1_parallel_GPU_fixed.zip` в `/home/ganie/Downloads`.
 Завершите текущие эксперименты. Затем в WSL:
 
 ```bash
 mkdir -p /home/ganie/StockExpertB1_parallel_update
-unzip -q -o /home/ganie/Downloads/StockExpert_B1_parallel_GPU_patch.zip -d /home/ganie/StockExpertB1_parallel_update
+unzip -q -o /home/ganie/Downloads/StockExpert_B1_parallel_GPU_fixed.zip -d /home/ganie/StockExpertB1_parallel_update
 python3 /home/ganie/StockExpertB1_parallel_update/apply_update.py /home/ganie/StockExpertB1 --check
 python3 /home/ganie/StockExpertB1_parallel_update/apply_update.py /home/ganie/StockExpertB1
 cd /home/ganie/StockExpertB1
@@ -98,15 +132,16 @@ bash b1-parallel.sh gpu-check
 При конфликте с вашей версией он перечислит файлы и остановится до записи.
 Не обходите проверку массовым копированием поверх неизвестной версии.
 
-Скрипт запуска обнаруживает существующие контейнеры, сеть и порты.
+Скрипт запуска обнаруживает существующие контейнеры выбранных проектов, сеть и порты.
 Он пересоздаёт только сервисы приложения с `--no-deps`; PostgreSQL,
 Redis, MinIO, Qdrant, Ollama и их volumes сохраняются.
 Если инфраструктура остановлена, сначала восстановите текущий штатный запуск.
 При активных заданиях переключение блокируется до их завершения.
 Команды удаления volumes не нужны.
 
-На вашем стенде ожидается прежний интерфейс `http://localhost:5176`;
-скрипт напечатает фактически найденный адрес. Обновите страницу через Ctrl+F5.
+Скрипт напечатает адрес с прежним портом проекта `stockexpert-frontend`.
+Он может отличаться от порта 5176 дублирующего frontend. Обновите страницу
+через Ctrl+F5.
 
 ## Как проверить новый сценарий
 

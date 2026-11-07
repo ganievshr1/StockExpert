@@ -8,6 +8,10 @@ export BACKEND_PORT="${BACKEND_PORT:-8002}"
 export FRONTEND_PORT="${FRONTEND_PORT:-5175}"
 export MINIO_CONSOLE_PORT="${MINIO_CONSOLE_PORT:-9003}"
 B1_PROJECT="${B1_PROJECT:-stockexpert-b1}"
+B1_FRONTEND_PROJECT="${B1_PROJECT}-frontend"
+if [[ "$B1_PROJECT" == stockexpert-backend ]]; then
+  B1_FRONTEND_PROJECT=stockexpert-frontend
+fi
 B1_MODE_FILE="$B1_ROOT/.b1-mode"
 mode=shared
 if [[ -f "$B1_MODE_FILE" ]]; then mode="$(cat "$B1_MODE_FILE")"; fi
@@ -26,7 +30,7 @@ backend_compose() {
   "${args[@]}" --profile backend-experiments "$@"
 }
 frontend_compose() {
-  docker compose --project-name "${B1_PROJECT}-frontend" -f "$B1_ROOT/stockexpert-frontend/docker-compose.yml" "$@"
+  docker compose --project-name "$B1_FRONTEND_PROJECT" -f "$B1_ROOT/stockexpert-frontend/docker-compose.yml" "$@"
 }
 guard_idle() {
   local backend_id active

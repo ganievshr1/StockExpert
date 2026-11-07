@@ -14,6 +14,11 @@ OVERRIDE = ROOT / '.b1-parallel-existing.json'
 APP_SERVICES = ('backend', 'worker', 'worker-batch', 'worker-control',
                 'worker-laboratory', 'worker-regex', 'worker-b1', 'beat')
 INFRA = ('postgres', 'redis', 'minio', 'qdrant', 'ollama')
+# The existing installation explicitly selected by its owner. Never infer the
+# frontend project by appending a suffix or reuse the accidentally saved name.
+BACKEND_PROJECT = 'stockexpert-backend'
+FRONTEND_PROJECT = 'stockexpert-frontend'
+DUPLICATE_FRONTEND_PROJECT = 'stockexpert-backend-frontend'
 ACTIVE_SCRIPT = """from sqlalchemy import select,func
 from app.db import SessionLocal,Job,LabExperiment,NormalizationExperiment
 from app.services.b1_experiments import active_runs
@@ -39,11 +44,19 @@ def fail(message):
     raise ValueError(message)
 
 
-def container(project, service):
-    ids = docker('ps', '-q', '--filter', f'label=com.docker.compose.project={project}',
-                 '--filter', f'label=com.docker.compose.service={service}').split()
+def container_ids(project, service, *, include_stopped=False):
+    args = ['ps', '-q']
+    if include_stopped:
+        args.append('-a')
+    return docker(*args, '--filter', f'label=com.docker.compose.project={project}',
+                  '--filter', f'label=com.docker.compose.service={service}').split()
+
+
+def container(project, service, *, include_stopped=False):
+    ids = container_ids(project, service, include_stopped=include_stopped)
     if len(ids) != 1:
-        fail(f'Нужен ровно один работающий контейнер {project}/{service}; найдено {len(ids)}. '
+        state = 'существующий' if include_stopped else 'работающий'
+        fail(f'Нужен ровно один {state} контейнер {project}/{service}; найдено {len(ids)}. '
              'Сначала восстановите обычный запуск существующего стенда.')
     return ids[0]
 
@@ -62,6 +75,13 @@ def binding(network, port):
     return value
 
 
+def configured_binding(ident, port):
+    # A stopped container often has no NetworkSettings.Ports; its declared
+    # binding remains in HostConfig and must be preserved on recreation.
+    bindings = inspect_field(ident, 'HostConfig.PortBindings') or {}
+    return binding({'Ports': bindings}, port)
+
+
 def mounted_volume(ident, destination):
     values = [m for m in inspect_field(ident, 'Mounts') if m.get('Destination') == destination]
     if len(values) != 1 or values[0].get('Type') != 'volume':
@@ -76,32 +96,36 @@ def selected_environment(ident, keys):
 
 
 def discover(saved):
-    project = os.environ.get('B1_PROJECT') or saved.get('project') or 'stockexpert-backend'
-    front_project = os.environ.get('B1_FRONTEND_PROJECT') or saved.get('frontend_project') or 'stockexpert-frontend'
+    project, front_project = BACKEND_PROJECT, FRONTEND_PROJECT
     backend = container(project, 'backend')
-    frontend = container(front_project, 'frontend')
+    frontend = container(front_project, 'frontend', include_stopped=True)
     back_network = inspect_field(backend, 'NetworkSettings')
-    front_network = inspect_field(frontend, 'NetworkSettings')
-    common = set(back_network.get('Networks', {})) & set(front_network.get('Networks', {}))
-    preferred = os.environ.get('STOCKEXPERT_NETWORK') or saved.get('network')
+    infrastructure = {service: container(project, service) for service in INFRA}
+    common = set(back_network.get('Networks', {}))
+    for ident in infrastructure.values():
+        common &= set(inspect_field(ident, 'NetworkSettings').get('Networks', {}))
+    preferred = os.environ.get('STOCKEXPERT_NETWORK')
+    if preferred and preferred not in common:
+        fail('Заданная сеть не объединяет работающие backend и инфраструктуру.')
+    preferred = preferred or (saved.get('network') if saved.get('network') in common else None)
     if preferred:
-        if preferred not in common:
-            fail('Сохранённая/заданная сеть не подключена одновременно к backend и frontend.')
         network = preferred
     elif len(common) == 1:
         network = common.pop()
     else:
-        fail('Не удалось однозначно выбрать существующую общую сеть backend/frontend.')
-    infrastructure = {service: container(project, service) for service in INFRA}
-    for service, ident in infrastructure.items():
-        if network not in inspect_field(ident, 'NetworkSettings').get('Networks', {}):
-            fail(f'Сервис {service} не подключён к существующей сети {network}.')
-    worker = container(project, 'worker')
+        fail('Не удалось однозначно выбрать существующую сеть backend и инфраструктуры.')
+    worker = container(project, 'worker', include_stopped=True)
+    duplicates = container_ids(DUPLICATE_FRONTEND_PROJECT, 'frontend')
+    if len(duplicates) > 1:
+        fail('У ошибочного frontend-проекта несколько работающих контейнеров; автоматическое переключение остановлено.')
     runtime = selected_environment(backend, {'JOB_ROUTING_MODE', 'B1_RUNTIME_PROFILE'})
     config = {
         'project': project, 'frontend_project': front_project, 'network': network,
         'backend_port': binding(back_network, '8000/tcp'),
-        'frontend_port': binding(front_network, '80/tcp'),
+        'frontend_port': configured_binding(frontend, '80/tcp'),
+        'frontend_id': frontend,
+        'frontend_running': bool(inspect_field(frontend, 'State.Running')),
+        'duplicate_frontend_ids': duplicates,
         'model_cache': mounted_volume(worker, '/models/huggingface'),
         'b1_artifacts': mounted_volume(backend, '/data/b1'),
         'backend_id': backend,
@@ -139,7 +163,9 @@ def compose(config, *, frontend=False):
             args += ['-f', str(ROOT / 'compose.b1.parallel.yml')]
             if config['hardware'] == 'gpu':
                 args += ['-f', str(ROOT / 'compose.b1.gpu.yml')]
-        args += ['-f', str(OVERRIDE), '--profile', 'backend-experiments']
+        if OVERRIDE.is_file():
+            args += ['-f', str(OVERRIDE)]
+        args += ['--profile', 'backend-experiments']
     return args, env
 
 
@@ -162,6 +188,41 @@ def guard_idle(config):
     if value != '0':
         fail(f'Активные задания/эксперименты: {value}. Дождитесь завершения или отмены; '
              'контейнеры не перезапущены. Не начинайте новые задания во время обновления.')
+
+
+def start_frontend(config):
+    """Replace only the requested frontend; retain the accidental one for recovery."""
+    stopped = []
+    try:
+        for ident in config['duplicate_frontend_ids']:
+            if inspect_field(ident, 'State.Running'):
+                docker('stop', ident)
+                stopped.append(ident)
+        invoke(config, 'up', '-d', '--no-deps', '--no-build', '--wait', 'frontend', frontend=True)
+    except (ValueError, OSError, subprocess.CalledProcessError):
+        recovery_errors = []
+        # Release a port occupied by our newly started, failed frontend before
+        # trying to restart the previously running duplicate. Do not stop a
+        # target which was already running before this operation.
+        if stopped and not config['frontend_running']:
+            try:
+                for ident in container_ids(FRONTEND_PROJECT, 'frontend'):
+                    docker('stop', ident)
+            except (ValueError, OSError, subprocess.CalledProcessError):
+                recovery_errors.append('не удалось остановить новый frontend')
+        for ident in stopped:
+            try:
+                docker('start', ident)
+            except (ValueError, OSError, subprocess.CalledProcessError):
+                recovery_errors.append(f'не удалось вернуть прежний frontend {ident}')
+        config['transition'] = 'frontend_restart_failed'
+        config['frontend_recovery'] = 'failed' if recovery_errors else 'attempted' if stopped else 'not_needed'
+        write_private(STATE, config)
+        if recovery_errors:
+            print('Восстановление frontend: ' + '; '.join(recovery_errors), file=sys.stderr)
+        elif stopped:
+            print('Прежний frontend повторно запущен после ошибки. Backend мог остаться обновлённым.', file=sys.stderr)
+        raise
 
 
 def main():
@@ -190,9 +251,9 @@ def main():
                       concurrency=args.concurrency or default_slots)
     elif args.action == 'restore':
         config.update(profile='standard', mode=args.mode, hardware='cpu', concurrency=1)
-    write_override(config)
     if args.action in ('start', 'restore'):
         guard_idle(config)
+        write_override(config)
         invoke(config, 'config', '--quiet')
         invoke(config, 'config', '--quiet', frontend=True)
         invoke(config, 'build', *APP_SERVICES)
@@ -202,7 +263,8 @@ def main():
         config['transition'] = 'app_restart_pending'
         write_private(STATE, config)
         invoke(config, 'up', '-d', '--no-deps', '--no-build', '--wait', *APP_SERVICES)
-        invoke(config, 'up', '-d', '--no-deps', '--no-build', '--wait', 'frontend', frontend=True)
+        start_frontend(config)
+        config['frontend_running'] = True
         config['transition'] = 'ready'
         write_private(STATE, config)
         print(f"Запущен профиль {config['profile']} / {config['hardware']}, очередь {config['mode']}. "
@@ -213,7 +275,7 @@ def main():
     elif args.action == 'status':
         print(json.dumps({k: config[k] for k in ('profile', 'hardware', 'mode', 'concurrency', 'network',
                                                 'backend_port', 'frontend_port', 'actual_backend_mode',
-                                                'actual_backend_profile')}, ensure_ascii=False))
+                                                'actual_backend_profile', 'frontend_running')}, ensure_ascii=False))
         if (config['profile'], config['mode']) != (config['actual_backend_profile'], config['actual_backend_mode']):
             print('Сохранённый профиль отличается от работающего backend. Возможно, запуск выполнен другим скриптом; '
                   'status не меняет работающие контейнеры.')

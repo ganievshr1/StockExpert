@@ -60,6 +60,16 @@ esac
         self.assertNotIn('down', calls)
         self.assertNotIn('--volumes', calls)
 
+    def test_existing_backend_uses_user_selected_frontend_project(self):
+        self.env['B1_PROJECT'] = 'stockexpert-backend'
+        self.env['B1_FRONTEND_PROJECT'] = 'stockexpert-backend-frontend'
+        result = self.run_launcher('status')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        calls = (self.root / 'docker.log').read_text()
+        self.assertIn('--project-name stockexpert-backend ', calls)
+        self.assertIn('--project-name stockexpert-frontend ', calls)
+        self.assertNotIn('--project-name stockexpert-backend-frontend ', calls)
+
 
 if __name__ == '__main__':
     unittest.main()
