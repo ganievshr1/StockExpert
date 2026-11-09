@@ -33,19 +33,13 @@ def attach_base(db,target,source_id,user):
     eligible=[i for i in eligible if i.stock_id in available]
     if not eligible:raise HTTPException(409,'В выбранной базе не осталось доступных позиций')
     source_config=session_config(db,source)
-    target_config=session_config(db,target)
-    reuse=source_config.fingerprint()==target_config.fingerprint()
-    # A known conflicting extractor in a passport always prevents mixed-model reuse.
-    for item in eligible:
-        provenance=(item.passport or {}).get('provenance',{})
-        if not source.llm_config and not (provenance.get('provider') and provenance.get('model')):
-            reuse=False  # An unrecorded historic extractor cannot be verified.
-        if provenance.get('model') and (provenance.get('model')!=target_config.model or provenance.get('provider')!=target_config.provider):
-            reuse=False
-        if provenance.get('llm_fingerprint') and provenance['llm_fingerprint']!=target_config.fingerprint():
-            reuse=False
+    # Selecting a ready base always reuses its saved result. The target model
+    # processes the new requirement only; original passport provenance is kept.
     active_sheets={(i.document_id,i.sheet) for i in eligible}
-    rows=[i for i in rows if (i.document_id,i.sheet) in active_sheets and (i.stock_id is None or i.stock_id in available)]
+    eligible_ids={i.id for i in eligible}
+    headers={(m['document_id'],m['sheet']):m['header_row'] for m in source.schema_doc['mappings']}
+    rows=[i for i in rows if (i.document_id,i.sheet) in active_sheets
+          and (i.id in eligible_ids or i.row_index<=headers[(i.document_id,i.sheet)])]
     docs=list(db.scalars(select(Document).where(Document.session_id==source_id,Document.kind=='residual')))
     copied=[];doc_map={}
     try:
@@ -56,21 +50,21 @@ def attach_base(db,target,source_id,user):
             new=Document(session_id=target.id,kind='residual',filename=d.filename,object_key=key,sha256=d.sha256,meta={**deepcopy(d.meta),'reused_from_session':source_id})
             db.add(new);db.flush();doc_map[d.id]=new.id
         for old in rows:
-            passport=deepcopy(old.passport) if reuse else None
+            passport=deepcopy(old.passport)
             if passport is not None:
                 passport['reuse']={'session_id':source_id,'item_id':old.id}
-            db.add(Item(session_id=target.id,document_id=doc_map[old.document_id],kind='residual',stock_id=old.stock_id,sheet=old.sheet,row_index=old.row_index,raw=deepcopy(old.raw),source_text=old.source_text,passport=passport,category=old.category if reuse else None,issues=deepcopy(old.issues) if reuse else []))
+            db.add(Item(session_id=target.id,document_id=doc_map[old.document_id],kind='residual',stock_id=old.stock_id,sheet=old.sheet,row_index=old.row_index,raw=deepcopy(old.raw),source_text=old.source_text,passport=passport,category=old.category,issues=deepcopy(old.issues)))
         schema=deepcopy(source.schema_doc)
         schema['mappings']=[m for m in schema['mappings'] if (m['document_id'],m['sheet']) in active_sheets]
         for mapping in schema['mappings']:mapping['document_id']=doc_map[mapping['document_id']]
-        if reuse and schema.get('taxonomy_mode')=='passports':
+        if schema.get('taxonomy_mode')=='passports':
             for category in schema['categories']:
                 category['item_count']=sum(i.category==category['id'] or (category['parent_id'] is None and i.passport.get('material_id')==category['id']) for i in eligible)
                 category['requirement_count']=0
             schema['analyzed_items']=len(eligible)
-        target.schema_doc=schema if reuse else {};target.approved=reuse;target.taxonomy_version=source.taxonomy_version if reuse else None;target.status='BASE_READY' if reuse else 'UPLOADED';target.progress=0
-        target.base_snapshot={'source_session_id':source.id,'source_title':source.title,'normalized_rows':len(eligible) if reuse else 0,'source_rows':len(eligible),'reused_passports':reuse,'source_llm_config':source_config.model_dump(),'copied_at':now().isoformat(),'taxonomy_version':source.taxonomy_version,'copy_seconds':round(perf_counter()-started,3)}
-        record(db,target.id,'NORMALIZED_BASE_REUSED' if reuse else 'BASE_SOURCES_COPIED_FOR_MODEL',target.base_snapshot,user.id)
+        target.schema_doc=schema;target.approved=True;target.taxonomy_version=source.taxonomy_version;target.status='BASE_READY';target.progress=0
+        target.base_snapshot={'source_session_id':source.id,'source_title':source.title,'normalized_rows':len(eligible),'source_rows':len(eligible),'reused_passports':True,'source_llm_config':source_config.model_dump(),'source_normalization_method':source.normalization_method,'copied_at':now().isoformat(),'taxonomy_version':source.taxonomy_version,'copy_seconds':round(perf_counter()-started,3)}
+        record(db,target.id,'NORMALIZED_BASE_REUSED',target.base_snapshot,user.id)
         db.flush()
     except Exception:
         for key in copied:

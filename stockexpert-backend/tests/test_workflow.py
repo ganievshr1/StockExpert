@@ -3,7 +3,7 @@ from openpyxl import Workbook,load_workbook
 from sqlalchemy import select
 from qdrant_client import QdrantClient
 from app.db import SessionLocal,Job,Item,ProcurementSession,Match,Audit
-from app.services import workflow,llm,storage,search
+from app.services import workflow,llm,storage,search,taxonomy
 from app.services.audit import verify
 
 def test_full_flow_real_parsers_and_qdrant_with_fake_model(client,auth,monkeypatch):
@@ -24,7 +24,7 @@ def test_full_flow_real_parsers_and_qdrant_with_fake_model(client,auth,monkeypat
         name=source.split('Описание: ')[-1].split(' | ')[0]
         return {'name':name,'name_evidence':name,'values':[{'key':'voltage_v','label':'Напряжение','kind':'number','value':v,'unit':'кВ','target_unit':'V','evidence':v+'кВ'}]}
     monkeypatch.setattr(llm,'structured',model)
-    base='/api/v1';sid=client.post(base+'/procurement/sessions',headers=auth,json={'title':'Cable test'}).json()['id']
+    base='/api/v1';sid=client.post(base+'/procurement/sessions',headers=auth,json={'title':'Cable test','taxonomy_enabled':True}).json()['id']
     wb=Workbook();ws=wb.active;ws.append(['Категория','Описание']);ws.append(['Кабель','Кабель КПпБП-120 3х16-3,3кВ']);ws.append(['Кабель','Кабель 3х16-6кВ']);buf=BytesIO();wb.save(buf)
     url=f'{base}/procurement/sessions/{sid}'
     assert client.post(url+'/upload-residuals',headers=auth,files={'file':('test.xlsx',buf.getvalue())}).status_code==201
@@ -42,6 +42,11 @@ def test_full_flow_real_parsers_and_qdrant_with_fake_model(client,auth,monkeypat
     with SessionLocal() as db:
         s=db.get(ProcurementSession,sid);j=db.get(Job,r.json()['task_id'])
         workflow.normalize_all(db,s,j,lambda _:None);j.status='COMPLETED';db.commit()
+        assert s.status=='H1_READY'
+    response=client.post(f'{base}/taxonomy/{sid}/rebuild',headers=auth);assert response.status_code==202
+    with SessionLocal() as db:
+        s=db.get(ProcurementSession,sid);j=db.get(Job,response.json()['task_id'])
+        taxonomy.build(db,s,j,lambda _:None);j.status='COMPLETED';db.commit()
         assert s.status=='TAXONOMY_REVIEW' and not s.approved
     schema=client.get(f'{base}/pipeline/{sid}/schema',headers=auth).json()
     next(f for f in schema['features'] if f['label']=='Напряжение')['comparison']='eq'

@@ -117,8 +117,14 @@ def pin_job_config(db, session, job):
 
 def selection_locked(db, session):
     from app.db import Job
-    return bool(session.schema_doc or session.approved or db.scalar(
-        select(Job.id).where(Job.session_id == session.id).limit(1)))
+    if session.normalization_method == 'regex':
+        # Preparing columns and CPU H1 do not consume the H2 model.
+        used = bool(db.scalar(select(Job.id).where(Job.session_id == session.id, Job.kind.in_(['taxonomy','full','match'])).limit(1)))
+        return used or bool(not session.base_snapshot.get('reused_passports') and session.schema_doc.get('taxonomy_status') in ('review','approved'))
+    started=bool(db.scalar(select(Job.id).where(Job.session_id == session.id).limit(1)))
+    # Copied passports do not lock the model for a new requirement.
+    if session.base_snapshot.get('reused_passports'):return started
+    return bool(session.schema_doc or session.approved or started)
 
 
 def probe_ollama():

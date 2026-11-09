@@ -1,0 +1,26 @@
+{
+  "prepared_on": "2026-11-09",
+  "patch_base_hashes": "all match",
+  "fixed_payload_hashes": {
+    "verified": 30
+  },
+  "launcher_unit_tests": {
+    "passed": 19,
+    "docker": "stub"
+  },
+  "git_importer_tests": {
+    "passed": 5,
+    "remote": "local bare fixture"
+  },
+  "syntax": {
+    "python_files": 139,
+    "shell_files": 4,
+    "status": "passed"
+  },
+  "not_run": [
+    "full backend test suite",
+    "full frontend test suite/build",
+    "real Docker/CUDA application run"
+  ],
+  "original_protocols": "docs/*VALIDATION.json from source releases are historical, not rerun claims"
+}

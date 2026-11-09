@@ -8,7 +8,8 @@ export type NavTab =
   | "reports"
   | "audit"
   | "metrics"
-  | "quality";
+  | "quality"
+  | "developer";
 export type Role = "admin" | "dmto_expert" | "buyer" | string;
 export interface User {
   id: number;
@@ -50,6 +51,7 @@ export interface SystemConfig {
   embedding_model: string;
   reranker_enabled: boolean;
   default_llm_config: LLMConfig;
+  default_normalization_method?: "llm" | "regex";
   model_selection_supported: boolean;
 }
 export interface Feature {
@@ -83,7 +85,7 @@ export interface SchemaDraft {
   mappings: Mapping[];
   taxonomy_mode?: "sample" | "passports";
   mapping_approved?: boolean;
-  taxonomy_status?: "pending" | "review" | "approved";
+  taxonomy_status?: "pending" | "review" | "approved" | "skipped";
   analyzed_items?: number;
 }
 export interface ProcurementSession {
@@ -98,6 +100,9 @@ export interface ProcurementSession {
   updated_at?: string;
   llm_config: LLMConfig;
   llm_locked: boolean;
+  taxonomy_enabled?: boolean;
+  normalization_method?: "llm" | "regex";
+  normalization_locked?: boolean;
   llm_legacy: boolean;
   base_snapshot?: {
     source_session_id: string;
@@ -123,7 +128,11 @@ export interface JobStatus {
   session_status?: string;
   error?: string | null;
   kind?: string;
-  params?: { llm_config?: LLMConfig; runtime?: Partial<LLMConfig> };
+  params?: {
+    llm_config?: LLMConfig;
+    runtime?: Partial<LLMConfig>;
+    normalization_config?: { method: "llm" | "regex"; rules_version?: string };
+  };
 }
 export interface ProgressEventData {
   status: string;
@@ -142,6 +151,7 @@ export interface Passport {
   name?: string;
   name_evidence?: string;
   material_id?: string | null;
+  normalized_features?: Feature[];
   normalized_attributes?: Record<string, string | number | null>;
   attributes: Record<string, string | number | null>;
   evidence: Record<

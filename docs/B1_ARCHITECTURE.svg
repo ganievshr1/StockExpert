@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1340" viewBox="0 0 1440 1340">
+<defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0L8 4L0 8Z" fill="#53657B"/></marker></defs>
+<rect width="1440" height="1340" fill="#F5F7FA"/>
+<text x="60" y="52" font-family="DejaVu Sans, Arial, sans-serif" font-size="30" font-weight="700" fill="#26354A" text-anchor="start">StockExpert  Многопользовательская обработка и проверка B1</text>
+<text x="60" y="84" font-family="DejaVu Sans, Arial, sans-serif" font-size="19" font-weight="400" fill="#53657B" text-anchor="start">Одинаковый бюджет исполнителей • Реальные HTTP-запросы • Измерение до готового результата</text>
+<rect x="60" y="115" width="1320" height="86" rx="14" fill="white" stroke="#B4C9DF" stroke-width="2"/>
+<text x="82" y="149" font-family="DejaVu Sans, Arial, sans-serif" font-size="22" font-weight="700" fill="#164C7E" text-anchor="start">Пользователи и данные</text>
+<text x="82" y="182" font-family="DejaVu Sans, Arial, sans-serif" font-size="18" font-weight="400" fill="#26354A" text-anchor="start">10 тестовых аккаунтов • Excel каталога • 10 готовых паспортов потребностей • Доступ в пределах организации</text>
+<path d="M 720 201 L 720 225 L 300 225 L 300 250" fill="none" stroke="#53657B" stroke-width="2.5" marker-end="url(#arrow)"/>
+<rect x="60" y="250" width="480" height="112" rx="14" fill="white" stroke="#B4C9DF" stroke-width="2"/>
+<text x="82" y="284" font-family="DejaVu Sans, Arial, sans-serif" font-size="22" font-weight="700" fill="#164C7E" text-anchor="start">React и Nginx</text>
+<text x="82" y="317" font-family="DejaVu Sans, Arial, sans-serif" font-size="18" font-weight="400" fill="#26354A" text-anchor="start">Прежняя загрузка и подбор</text>
+<text x="82" y="343" font-family="DejaVu Sans, Arial, sans-serif" font-size="18" font-weight="400" fill="#26354A" text-anchor="start">Вкладка «Проверка гипотезы B1»</text>
+<rect x="620" y="250" width="760" height="112" rx="14" fill="white" stroke="#B4C9DF" stroke-width="2"/>
+<text x="642" y="284" font-family="DejaVu Sans, Arial, sans-serif" font-size="22" font-weight="700" fill="#164C7E" text-anchor="start">FastAPI и JWT</text>
+<text x="642" y="317" font-family="DejaVu Sans, Arial, sans-serif" font-size="18" font-weight="400" fill="#26354A" text-anchor="start">Проверка организации и прав • Сессии и задания с UUID</text>
+<text x="642" y="343" font-family="DejaVu Sans, Arial, sans-serif" font-size="18" font-weight="400" fill="#26354A" text-anchor="start">Штатные маршруты создания, статуса и выдачи подбора</text>
+<path d="M 540 305 L 620 305" fill="none" stroke="#53657B" stroke-width="2.5" marker-end="url(#arrow)"/>
+<path d="M 1000 362 L 1000 412" fill="none" stroke="#53657B" stroke-width="2.5" marker-end="url(#arrow)"/>
+<rect x="620" y="412" width="760" height="116" rx="14" fill="white" stroke="#B4C9DF" stroke-width="2"/>
+<text x="642" y="446" font-family="DejaVu Sans, Arial, sans-serif" font-size="22" font-weight="700" fill="#164C7E" text-anchor="start">PostgreSQL</text>
+<text x="642" y="479" font-family="DejaVu Sans, Arial, sans-serif" font-size="18" font-weight="400" fill="#26354A" text-anchor="start">Устойчивый реестр Job → QUEUED → RUNNING → COMPLETED</text>
+<text x="642" y="505" font-family="DejaVu Sans, Arial, sans-serif" font-size="18" font-weight="400" fill="#26354A" text-anchor="start">Паспорта, результаты, аудит, измерения ожидания и обработки</text>
+<rect x="60" y="412" width="480" height="116" rx="14" fill="#F7F3FD" stroke="#C6B8E6" stroke-width="2"/>
+<text x="82" y="446" font-family="DejaVu Sans, Arial, sans-serif" font-size="22" font-weight="700" fill="#614492" text-anchor="start">Контроллер B1</text>
+<text x="82" y="479" font-family="DejaVu Sans, Arial, sans-serif" font-size="18" font-weight="400" fill="#26354A" text-anchor="start">worker-b1 • отдельная очередь</text>
+<text x="82" y="505" font-family="DejaVu Sans, Arial, sans-serif" font-size="18" font-weight="400" fill="#26354A" text-anchor="start">Планировщик HTTP и журнал /data/b1</text>
+<path d="M 620 280 L 560 280 L 560 390 L 300 390 L 300 412" fill="none" stroke="#53657B" stroke-width="2.5" marker-end="url(#arrow)"/>
+<path d="M 540 441 L 580 441 L 580 335 L 620 335" fill="none" stroke="#53657B" stroke-width="2.5" marker-end="url(#arrow)"/>
+<path d="M 1000 528 L 1000 558 L 300 558 L 300 590" fill="none" stroke="#53657B" stroke-width="2.5" marker-end="url(#arrow)"/>
+<rect x="60" y="590" width="480" height="108" rx="14" fill="#F7F3FD" stroke="#C6B8E6" stroke-width="2"/>
+<text x="82" y="624" font-family="DejaVu Sans, Arial, sans-serif" font-size="22" font-weight="700" fill="#614492" text-anchor="start">Диспетчер</text>
+<text x="82" y="657" font-family="DejaVu Sans, Arial, sans-serif" font-size="18" font-weight="400" fill="#26354A" text-anchor="start">Celery beat → control</text>
+<text x="82" y="683" font-family="DejaVu Sans, Arial, sans-serif" font-size="18" font-weight="400" fill="#26354A" text-anchor="start">worker-control публикует Job в Redis</text>
+<rect x="620" y="590" width="760" height="108" rx="14" fill="#F7F3FD" stroke="#C6B8E6" stroke-width="2"/>
+<text x="642" y="624" font-family="DejaVu Sans, Arial, sans-serif" font-size="22" font-weight="700" fill="#614492" text-anchor="start">Redis и маршрутизация</text>
+<text x="642" y="657" font-family="DejaVu Sans, Arial, sans-serif" font-size="18" font-weight="400" fill="#26354A" text-anchor="start">JOB_ROUTING_MODE выбирает shared или split</text>
+<text x="642" y="683" font-family="DejaVu Sans, Arial, sans-serif" font-size="18" font-weight="400" fill="#26354A" text-anchor="start">Prefetch = 1 • очередь управления отделена от вычислений</text>
+<path d="M 540 644 L 620 644" fill="none" stroke="#53657B" stroke-width="2.5" marker-end="url(#arrow)"/>
+<path d="M 1000 698 L 1000 726 L 375 726 L 375 768" fill="none" stroke="#53657B" stroke-width="2.5" marker-end="url(#arrow)"/>
+<path d="M 1000 698 L 1000 768" fill="none" stroke="#53657B" stroke-width="2.5" marker-end="url(#arrow)"/>
+<rect x="60" y="768" width="630" height="164" rx="14" fill="#ECF1F7" stroke="#9FAFC4" stroke-width="2"/>
+<text x="82" y="802" font-family="DejaVu Sans, Arial, sans-serif" font-size="22" font-weight="700" fill="#374E6C" text-anchor="start">Baseline shared</text>
+<text x="82" y="835" font-family="DejaVu Sans, Arial, sans-serif" font-size="18" font-weight="400" fill="#26354A" text-anchor="start">Очередь shared → 2 одинаковых исполнителя</text>
+<text x="82" y="861" font-family="DejaVu Sans, Arial, sans-serif" font-size="18" font-weight="400" fill="#26354A" text-anchor="start">worker: 1 слот • worker-batch: 1 слот</text>
+<text x="82" y="887" font-family="DejaVu Sans, Arial, sans-serif" font-size="18" font-weight="400" fill="#26354A" text-anchor="start">На каждый: до 1 CPU и 3 GiB RAM</text>
+<text x="82" y="913" font-family="DejaVu Sans, Arial, sans-serif" font-size="18" font-weight="400" fill="#26354A" text-anchor="start">Всего: 2 бизнес-слота</text>
+<rect x="750" y="768" width="630" height="164" rx="14" fill="#ECF8F3" stroke="#74B8A6" stroke-width="2"/>
+<text x="772" y="802" font-family="DejaVu Sans, Arial, sans-serif" font-size="22" font-weight="700" fill="#12634E" text-anchor="start">Проверяемый вариант split</text>
+<text x="772" y="835" font-family="DejaVu Sans, Arial, sans-serif" font-size="18" font-weight="400" fill="#26354A" text-anchor="start">interactive → worker: 1 слот подбора</text>
+<text x="772" y="861" font-family="DejaVu Sans, Arial, sans-serif" font-size="18" font-weight="400" fill="#26354A" text-anchor="start">batch → worker-batch: 1 слот подготовки</text>
+<text x="772" y="887" font-family="DejaVu Sans, Arial, sans-serif" font-size="18" font-weight="400" fill="#26354A" text-anchor="start">Те же CPU, RAM и общий лимит Ollama</text>
+<text x="772" y="913" font-family="DejaVu Sans, Arial, sans-serif" font-size="18" font-weight="400" fill="#26354A" text-anchor="start">Всего: 2 бизнес-слота</text>
+<path d="M 375 932 L 375 965 L 720 965 L 720 1000" fill="none" stroke="#53657B" stroke-width="2.5" marker-end="url(#arrow)"/>
+<path d="M 1065 932 L 1065 965 L 720 965" fill="none" stroke="#53657B" stroke-width="2.5"/>
+<rect x="60" y="1000" width="1320" height="160" rx="14" fill="#FFF7EA" stroke="#D7B17C" stroke-width="2"/>
+<text x="82" y="1034" font-family="DejaVu Sans, Arial, sans-serif" font-size="22" font-weight="700" fill="#885916" text-anchor="start">Общие зависимости штатной обработки</text>
+<text x="82" y="1067" font-family="DejaVu Sans, Arial, sans-serif" font-size="18" font-weight="400" fill="#26354A" text-anchor="start">Ollama: LLM и эмбеддинги, NUM_PARALLEL=1, MAX_LOADED_MODELS=1</text>
+<text x="82" y="1093" font-family="DejaVu Sans, Arial, sans-serif" font-size="18" font-weight="400" fill="#26354A" text-anchor="start">Qdrant: векторы и фильтрация сессии • BM25 + RRF + правила • CPU reranker</text>
+<text x="82" y="1119" font-family="DejaVu Sans, Arial, sans-serif" font-size="18" font-weight="400" fill="#26354A" text-anchor="start">MinIO: исходные Excel/TXT и файлы • PostgreSQL: сохранённые результаты</text>
+<text x="82" y="1145" font-family="DejaVu Sans, Arial, sans-serif" font-size="18" font-weight="400" fill="#26354A" text-anchor="start">Готовая база для поиска закреплена; один отдельный каталог готовится в фоне</text>
+<text x="60" y="1200" font-family="DejaVu Sans, Arial, sans-serif" font-size="23" font-weight="700" fill="#26354A" text-anchor="start">Три режима измерения</text>
+<text x="60" y="1232" font-family="DejaVu Sans, Arial, sans-serif" font-size="19" font-weight="400" fill="#26354A" text-anchor="start">10 пользователей × 1 одновременно  |  1 пользователь × 10 последовательно  |  Полный протокол 5 пар</text>
+<text x="60" y="1264" font-family="DejaVu Sans, Arial, sans-serif" font-size="19" font-weight="400" fill="#26354A" text-anchor="start">B1: p95 split/shared ≤ 0,70; скорость подготовки split/shared ≥ 0,90; ошибки split &lt; 1%.</text>
+<text x="60" y="1296" font-family="DejaVu Sans, Arial, sans-serif" font-size="18" font-weight="400" fill="#53657B" text-anchor="start">Короткие серии — диагностика. Имитационная модель и измерения приложения имеют разные результаты.</text>
+</svg>

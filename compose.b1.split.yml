@@ -1,0 +1,22 @@
+# Same services/resources as shared. Drain active jobs before switching mode.
+x-b1-mode: &b1-mode
+  JOB_ROUTING_MODE: split
+services:
+  backend:
+    environment: *b1-mode
+  worker:
+    environment: *b1-mode
+    command: [celery, -A, app.tasks:celery_app, worker, --loglevel=INFO, --concurrency=1, --pool=solo, --prefetch-multiplier=1, -Q, interactive]
+  worker-batch:
+    environment: *b1-mode
+    command: [celery, -A, app.tasks:celery_app, worker, --loglevel=INFO, --concurrency=1, --pool=solo, --prefetch-multiplier=1, -Q, batch]
+  worker-control:
+    environment: *b1-mode
+  worker-laboratory:
+    environment: *b1-mode
+  worker-regex:
+    environment: *b1-mode
+  worker-b1:
+    environment: *b1-mode
+  beat:
+    environment: *b1-mode

@@ -6,6 +6,7 @@ import { MappingEditor } from "../features/session/MappingEditor";
 import { SessionControls } from "../features/session/SessionControls";
 import { SessionModelPanel } from "../components/ModelPicker";
 import { Stepper } from "../components/Stepper";
+import { SessionTaxonomyPanel } from "../components/TaxonomyModePicker";
 import { Empty, Loading, Modal, Notice, PageTitle } from "../components/ui";
 export function DataPage() {
   const w = useWorkspace();
@@ -15,10 +16,14 @@ export function DataPage() {
   if (!w.data) return <Loading />;
   const { session, documents } = w.data;
   const source = session.base_snapshot;
+  const readyBase =
+    !!source?.source_session_id && source.reused_passports !== false;
   const hasFiles = ["residual", "requirement"].every((kind) =>
     documents.some((document) => document.kind === kind),
   );
   const schema = session.schema_doc;
+  const regex = session.normalization_method === "regex";
+  const h1Ready = session.status === "H1_READY";
   const blocked = w.busy || w.active || !w.canEdit;
   async function next() {
     if (w.active) {
@@ -30,6 +35,14 @@ export function DataPage() {
         w.setTab("processing");
     } else if (schema.taxonomy_status === "review") {
       w.setTab("taxonomy");
+    } else if (h1Ready) {
+      if (
+        await w.act(
+          () => api.rebuildTaxonomy(w.sid),
+          "Классификация H2 поставлена в очередь",
+        )
+      )
+        w.setTab("processing");
     } else if (schema.mapping_approved) {
       if (
         await w.act(
@@ -51,20 +64,30 @@ export function DataPage() {
   const label = w.active
     ? "Ход обработки"
     : session.approved
-      ? "Запустить подбор"
+      ? readyBase
+        ? "Сопоставить с готовой базой"
+        : "Запустить подбор"
       : schema.taxonomy_status === "review"
         ? "Проверить классификатор"
-        : schema.mapping_approved
-          ? "Нормализовать позиции"
-          : schema.mappings
-            ? "Утвердите столбцы ниже"
-            : "Продолжить";
+        : h1Ready
+          ? "H2: построить категории"
+          : schema.mapping_approved
+            ? regex
+              ? "H1: нормализовать регулярками"
+              : "H1: нормализовать через LLM"
+            : schema.mappings
+              ? "Утвердите столбцы ниже"
+              : "Продолжить";
   return (
     <div className="section-gap">
       <PageTitle
         eyebrow="Подготовка сессии"
         title="Загрузка и проверка данных"
-        description="Загрузите базу складских остатков Excel и опросный лист с потребностью в TXT."
+        description={
+          readyBase
+            ? "Загрузите новый опросный лист TXT. Сопоставление использует уже нормализованные значения складской базы."
+            : "Загрузите базу складских остатков Excel и опросный лист с потребностью в TXT."
+        }
         actions={
           <button
             className="btn-primary"
@@ -83,6 +106,14 @@ export function DataPage() {
         }
       />
       <Stepper current={0} />
+      <SessionTaxonomyPanel />
+      {regex && (
+        <Notice title="H1 — регулярные выражения на CPU">
+          {h1Ready
+            ? "Паспорта сохранены в сессии. Можно рассчитать H1 в разделе «Для разработчика» или продолжить классификацию H2."
+            : "После утверждения столбцов запустите H1. На этом этапе Qwen/DeepSeek не вызываются. H2 запускается следующим шагом, если он включён."}
+        </Notice>
+      )}
       <div className="split equal">
         {source?.source_session_id ? (
           <section className="panel stack">
@@ -95,8 +126,8 @@ export function DataPage() {
             </span>
             <p className="muted">
               {source.reused_passports !== false
-                ? `${source.normalized_rows} нормализованных позиций. Повторно загружать Excel не нужно.`
-                : "Выбранная модель отличается. Исходные строки будут обработаны заново."}
+                ? `${source.normalized_rows} нормализованных позиций. Значения и категории используются без повторной нормализации, независимо от выбранной модели.`
+                : "Эта сессия создана в прежнем режиме копирования исходных строк. Чтобы использовать готовые паспорта, создайте новую сессию с этой базой."}
             </p>
             <small>
               Связанная база: {source.source_session_id.slice(0, 8)}
@@ -107,19 +138,25 @@ export function DataPage() {
         )}
         <DocumentCard kind="requirement" />
       </div>
-      {schema.mappings && <MappingEditor />}
+      {schema.mappings && !readyBase && <MappingEditor />}
       {hasFiles && (
         <Notice
           title={
-            schema.mapping_approved
-              ? "Файлы и столбцы готовы к обработке"
-              : "Исходные файлы загружены"
+            readyBase
+              ? "Готово к сопоставлению"
+              : schema.mapping_approved
+                ? "Файлы и столбцы готовы к обработке"
+                : "Исходные файлы загружены"
           }
           tone="success"
         >
-          {schema.mapping_approved
-            ? "Запустите нормализацию, затем проверьте категории и правила сравнения."
-            : "Нажмите «Продолжить», чтобы определить столбцы Excel. Опросный лист TXT будет разобран отдельно."}
+          {readyBase
+            ? "Нажмите «Сопоставить с готовой базой». Будет обработан только новый опросный лист; готовые складские паспорта и классификатор сохранятся."
+            : schema.mapping_approved
+              ? regex
+                ? (session.taxonomy_enabled === false ? "Выполните H1, проверьте параметры и запустите поиск без дерева категорий." : "Выполните H1 регулярками, затем запустите H2 для классификации паспортов.")
+                : (session.taxonomy_enabled === false ? "Запустите нормализацию. Затем доступны правила параметров и подбор без H2." : "Выполните H1 через LLM, затем отдельно запустите H2 и проверьте категории.")
+              : "Нажмите «Продолжить», чтобы определить столбцы Excel. Опросный лист TXT будет разобран отдельно."}
         </Notice>
       )}
       {schema.taxonomy_status === "review" && (
@@ -130,7 +167,8 @@ export function DataPage() {
       )}
       <footer className="page-footer">
         <span>
-          Модель: {session.llm_config.label} ·{" "}
+          H1: {regex ? "Регулярки" : "LLM"} · H2: {session.taxonomy_enabled === false ? "отключён" : "включён"} · Модель:{" "}
+          {session.llm_config.label} ·{" "}
           {session.llm_config.provider === "ollama"
             ? "обработка внутри компании"
             : "внешний DeepSeek API"}
@@ -140,7 +178,7 @@ export function DataPage() {
             Управление данными
           </button>
           <button className="btn" onClick={() => setSettings(true)}>
-            Изменить модель
+            Настройки H1 и H2
           </button>
         </div>
       </footer>

@@ -1,11 +1,13 @@
 import { ScrollArea } from "../components/ScrollArea";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useWorkspace } from "../state/Workspace";
 import {
   qualityApi,
   type Answer,
   type QualityTarget,
 } from "../services/quality";
+import { labApi } from "../services/laboratory";
+import type { SchemaDraft } from "../types";
 import { materialFeatures } from "../services/taxonomy";
 import { useDebouncedValue, useResource } from "../hooks/useResource";
 import { ComparisonTable } from "../components/ComparisonTable";
@@ -19,41 +21,50 @@ import {
   percentage,
 } from "../components/ui";
 
+function reviewedInMode(row: QualityTarget, mode: "text" | "parameters" | "category") {
+  const answer=row.review?.answer;
+  return mode === "text" ? Object.hasOwn(answer?.attributes || {}, "name") : mode === "category" ? !!answer?.category_reviewed : Object.keys(answer?.attributes || {}).some(key=>key!=="name");
+}
 function PassportReview({
   row,
   disabled,
   onSave,
   onSkip,
+  schema,
+  mode,
 }: {
+  mode: "text" | "parameters" | "category";
+  schema?: SchemaDraft;
   row: QualityTarget;
   disabled: boolean;
   onSave: (answer: Answer) => Promise<void>;
   onSkip: () => void;
 }) {
   const w = useWorkspace();
-  const features = materialFeatures(
-    w.data?.session.schema_doc,
+  const [showAllFields, setShowAllFields] = useState(false);
+  const configured = materialFeatures(
+    schema || w.data?.session.schema_doc,
     row.target.passport?.category_id,
   );
+  const categoryFeatures = configured.length ? configured : row.target.passport?.normalized_features || [];
+  const allFeatures = (schema?.features?.length ? schema.features : categoryFeatures);
+  const textOnly = mode === "text";
+  const categoryOnly = mode === "category";
   const old = row.review?.answer;
+  const [custom,setCustom]=useState<NonNullable<Answer['custom_features']>>(old?.custom_features||[]);
+  const [newKey,setNewKey]=useState(''),[newLabel,setNewLabel]=useState(''),[newUnit,setNewUnit]=useState('none');
+  const [reviewComment,setReviewComment]=useState(old?.comment||'');
+  const [expectedCategory,setExpectedCategory]=useState(old?.expected_category||'');
+  const features = textOnly ? [{key:"name",label:"Текст наименования",kind:"string",unit:"none"}] : categoryOnly ? [] : [...(showAllFields ? allFeatures : categoryFeatures).filter(f => f.key !== "name"),...custom.map(f=>({...f,kind:f.unit==='none'?'string':'number'}))];
   const [checked, setChecked] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(
-      features.map((feature) => [
-        feature.key,
-        Object.hasOwn(old?.attributes || {}, feature.key),
-      ]),
+      Object.keys(old?.attributes || {}).map(key => [key, true]),
     ),
   );
   const [values, setValues] = useState<Record<string, string>>(() =>
     Object.fromEntries(
-      features.map((feature) => [
-        feature.key,
-        String(
-          (Object.hasOwn(old?.attributes || {}, feature.key)
-            ? old?.attributes?.[feature.key]
-            : row.target.passport?.attributes[feature.key]) ?? "",
-        ),
-      ]),
+      Object.entries({ ...(row.target.passport?.attributes || {}), name: row.target.passport?.name ?? row.target.passport?.attributes?.name, ...(old?.attributes || {}) })
+        .map(([key, value]) => [key, String(value ?? "")]),
     ),
   );
   const [categoryChecked, setCategoryChecked] = useState(
@@ -70,7 +81,7 @@ function PassportReview({
       const attributes: Record<string, string | number | null> = {};
       for (const feature of features) {
         if (!checked[feature.key]) continue;
-        const raw = values[feature.key].trim();
+        const raw = (values[feature.key] || "").trim();
         const value =
           raw === ""
             ? null
@@ -85,13 +96,16 @@ function PassportReview({
           throw Error("Введите корректное число для " + feature.label);
         attributes[feature.key] = value;
       }
-      if (!Object.keys(attributes).length && !categoryChecked)
+      if (!Object.keys(attributes).length && !(categoryOnly && categoryChecked))
         throw Error("Отметьте проверенные параметры или категорию");
       setError("");
       await onSave({
-        attributes,
-        category_reviewed: categoryChecked,
-        category_id: categoryChecked ? category || null : null,
+        attributes: {...(old?.attributes || {}), ...attributes},
+        ...(custom.length ? {custom_features: custom} : {}),
+        ...(reviewComment ? {comment: reviewComment} : {}),
+        category_reviewed: categoryOnly ? categoryChecked : old?.category_reviewed || false,
+        category_id: categoryOnly ? (categoryChecked ? category || null : null) : old?.category_id || null,
+        ...(expectedCategory || old?.expected_category ? {expected_category: categoryOnly ? expectedCategory||null : old?.expected_category||null} : {}),
       });
     } catch (reason) {
       setError((reason as Error).message);
@@ -100,9 +114,9 @@ function PassportReview({
   return (
     <div className="stack">
       <div className="row between">
-        <h2>Проверьте паспорт позиции</h2>
-        <span className={`badge ${row.review ? "success" : "warning"}`}>
-          {row.review ? "Проверено" : "Не проверено"}
+        <h2>{textOnly ? "H1 · Проверьте текст наименования" : categoryOnly ? "H2 · Проверьте категорию" : "Проверьте технические параметры"}</h2>
+        <span className={`badge ${reviewedInMode(row, mode) ? "success" : "warning"}`}>
+          {reviewedInMode(row, mode) ? "Проверено" : "Не проверено"}
         </span>
       </div>
       <div className="source-box">
@@ -114,7 +128,17 @@ function PassportReview({
         </small>
         {row.target.source_text}
       </div>
-      <label>
+      <details><summary>Исходные ячейки и полный паспорт</summary><pre className="passport-json">{JSON.stringify({ source: row.target.raw, passport: row.target.passport }, null, 2)}</pre></details>
+      <label>Комментарий и цитаты из исходника<textarea value={reviewComment} onChange={e=>setReviewComment(e.target.value)} maxLength={2000} rows={2} disabled={disabled}/></label>
+      {mode === "parameters" && <label className="checkbox-label"><input type="checkbox" checked={showAllFields} onChange={e => setShowAllFields(e.target.checked)} />Все параметры схемы, включая отсутствующие в категории</label>}
+      {mode === "parameters" && <details><summary>Добавить параметр, пропущенный моделью</summary><div className="stack"><label>Ключ параметра<input value={newKey} onChange={e=>setNewKey(e.target.value)} placeholder="power_kw"/></label><label>Название<input value={newLabel} onChange={e=>setNewLabel(e.target.value)} placeholder="Мощность"/></label><label>Единица<input value={newUnit} onChange={e=>setNewUnit(e.target.value)} placeholder="kW или none"/></label><button className="btn" disabled={disabled} onClick={()=>{if(!/^[a-z][a-z0-9_]{0,63}$/.test(newKey)||!newLabel.trim()||features.some(f=>f.key===newKey)){setError('Введите уникальный английский ключ и название параметра');return;}setCustom(v=>[...v,{key:newKey,label:newLabel.trim(),unit:newUnit||'none',aliases:[]}]);setChecked(v=>({...v,[newKey]:true}));setNewKey('');setNewLabel('');setError('');}}>Добавить поле</button><small>Укажите значение и цитату в комментарии. Отсутствие предсказания будет учтено как FN.</small></div></details>}
+      {textOnly && <p>Одна позиция — одно сравнение текста. Категории H2 и технические параметры не участвуют. Сравниваются все символы, кроме пробелов по краям.</p>}
+      {!categoryOnly && <button className="btn" disabled={disabled} onClick={() => setChecked(previous => ({ ...previous, ...Object.fromEntries(features.map(f => [f.key, true])) }))}>{textOnly ? "Текст проверен" : "Отметить показанные параметры проверенными"}</button>}
+      {categoryOnly && <><label>
+        Конечная категория, если её нет в списке
+        <input value={expectedCategory} disabled={disabled} placeholder="Введите правильную категорию" onChange={e=>{setExpectedCategory(e.target.value);setCategoryChecked(true);}}/>
+        <small>Текст имеет приоритет над списком. Отсутствующая или другая категория модели считается ошибкой H2.</small>
+      </label><label>
         Правильная категория
         <select
           value={category}
@@ -125,7 +149,7 @@ function PassportReview({
           }}
         >
           <option value="">Нет определённой категории — вне Accuracy</option>
-          {w.data?.session.schema_doc.categories?.map((value) => (
+          {(schema || w.data?.session.schema_doc)?.categories?.map((value) => (
             <option value={value.id} key={value.id}>
               {value.name}
             </option>
@@ -140,8 +164,8 @@ function PassportReview({
           onChange={(event) => setCategoryChecked(event.target.checked)}
         />
         Категория проверена
-      </label>
-      <ScrollArea label="Проверка параметров паспорта" className="review-table">
+      </label></>}
+      {!categoryOnly && <ScrollArea label="Проверка параметров паспорта" className="review-table">
         <table>
           <thead>
             <tr>
@@ -153,15 +177,15 @@ function PassportReview({
           </thead>
           <tbody>
             {features.map((feature) => {
-              const actual = row.target.passport?.attributes[feature.key];
-              const expected = values[feature.key];
+              const actual = feature.key === "name" ? (row.target.passport?.name ?? row.target.passport?.attributes?.name) : row.target.passport?.attributes[feature.key];
+              const expected = values[feature.key] || "";
               const comparable =
                 expected === ""
                   ? null
                   : feature.kind === "string"
                     ? expected.trim()
                     : Number(expected.replace(",", "."));
-              const same = (actual ?? null) === comparable;
+              const same = (feature.key === "name" && typeof actual === "string" ? actual.trim() : actual ?? null) === comparable;
               return (
                 <tr key={feature.key}>
                   <td>
@@ -170,9 +194,9 @@ function PassportReview({
                   </td>
                   <td>
                     {actual ?? "Нет данных"}
-                    {row.target.passport?.evidence[feature.key]?.quote && (
+                    {row.target.passport?.evidence?.[feature.key]?.quote && (
                       <small style={{ display: "block", marginTop: 8 }}>
-                        «{row.target.passport.evidence[feature.key].quote}»
+                        «{row.target.passport.evidence?.[feature.key]?.quote}»
                       </small>
                     )}
                   </td>
@@ -231,12 +255,12 @@ function PassportReview({
             })}
           </tbody>
         </table>
-      </ScrollArea>
-      <small>
+      </ScrollArea>}
+      {!categoryOnly && <small>
         Проверьте каждый отмеченный параметр по источнику. «Нет данных» означает
         отсутствие значения в источнике. Непроверенные поля не участвуют в F1.
-      </small>
-      {features.length === 1 && features[0].key === "name" && (
+      </small>}
+      {mode === "parameters" && features.length === 0 && (
         <Notice title="В схеме доступно только наименование" tone="warning">
           Размеры и другие свойства не оцениваются отдельно. Чтобы проверять их,
           добавьте признаки в классификатор до утверждения схемы новой сессии.
@@ -356,7 +380,7 @@ function CandidateReview({
     </div>
   );
 }
-export function QualityPage() {
+export function QualityPage({initialMode="text",onReviewed}:{initialMode?:"text"|"parameters"|"category";onReviewed?:()=>void}={}) {
   const w = useWorkspace();
   const [kind, setKind] = useState<"passport" | "candidate">("passport"),
     [shortlisted, setShortlisted] = useState(false),
@@ -364,18 +388,28 @@ export function QualityPage() {
     [query, setQuery] = useState(""),
     [requirement, setRequirement] = useState(""),
     [offset, setOffset] = useState(0),
+    [pageSize, setPageSize] = useState(10),
+    [passportKind, setPassportKind] = useState("residual"),
     [selectedId, setSelectedId] = useState(""),
     [revision, setRevision] = useState(0);
+  const [jobId,setJobId]=useState("");
+  const [reviewMode,setReviewMode]=useState<"text" | "parameters" | "category">(initialMode);
+  const lastOnPage=useRef(false);
+  const runs=useResource(()=>labApi.dashboard(w.sid),[w.sid,revision],!!w.sid);
   const q = useDebouncedValue(query);
   const summary = useResource(
-    () => qualityApi.summary(w.sid),
-    [w.sid, w.data?.job.id, w.data?.job.status, revision],
+    () => qualityApi.summary(w.sid,jobId),
+    [w.sid, jobId, w.data?.job.id, w.data?.job.status, revision],
     !!w.sid,
   );
   const rows = useResource(
     () =>
       qualityApi.targets(w.sid, kind, offset, shortlisted, {
         q,
+        ...(jobId ? {job_id:jobId}:{}),
+        limit: String(pageSize),
+        ...(kind === "passport" && passportKind ? { passport_kind: passportKind } : {}),
+        ...(kind === "passport" ? {review_mode: reviewMode} : {}),
         unreviewed: String(unreviewed),
         ...(kind === "candidate" && requirement
           ? { requirement_id: requirement }
@@ -385,6 +419,9 @@ export function QualityPage() {
       w.sid,
       kind,
       offset,
+      pageSize,
+      passportKind,
+      reviewMode,
       shortlisted,
       q,
       unreviewed,
@@ -395,8 +432,10 @@ export function QualityPage() {
     !!summary.data?.job_id,
   );
   useEffect(() => {
-    if (rows.data)
-      setSelectedId((previous) =>
+    if (!rows.data) return;
+    const chooseLast=lastOnPage.current;lastOnPage.current=false;
+    setSelectedId((previous) =>
+        chooseLast ? (rows.data!.items.at(-1)?.target.id || "") :
         rows.data!.items.some((row) => row.target.id === previous)
           ? previous
           : rows.data!.items[0]?.target.id || "",
@@ -408,8 +447,8 @@ export function QualityPage() {
   if (!summary.data?.job_id)
     return (
       <Empty
-        title="Подбор ещё не завершён"
-        description="Завершите подбор запасов, чтобы создать эталонные ответы для оценки качества."
+        title="Нормализация ещё не завершена"
+        description="Завершите нормализацию, чтобы просмотреть и проверить все паспорта сессии."
       />
     );
   const quality = summary.data,
@@ -423,8 +462,8 @@ export function QualityPage() {
     );
     const item = rows.data.items[index + 1];
     if (item) setSelectedId(item.target.id);
-    else if (offset + 10 < rows.data.total) setOffset(offset + 10);
-    else if (rows.data.items[0]) setSelectedId(rows.data.items[0].target.id);
+    else if (offset + pageSize < rows.data.total) setOffset(offset + pageSize);
+    // Stay on the last position; do not wrap to the beginning.
   }
   async function save(answer: Answer) {
     if (!selected || !rows.data) return;
@@ -446,17 +485,17 @@ export function QualityPage() {
           (row) => row.target.id !== selected.target.id,
         );
         setSelectedId(remaining[0]?.target.id || "");
-        if (rows.data.total - 1 <= offset) setOffset(Math.max(0, offset - 10));
+        if (rows.data.total - 1 <= offset) setOffset(Math.max(0, offset - pageSize));
       } else next();
-      setRevision((value) => value + 1);
+      setRevision((value) => value + 1); onReviewed?.();
     }
   }
   const reviewed =
       kind === "passport"
-        ? coverage.passports_reviewed
+        ? (reviewMode === "text" ? coverage.text_reviewed : coverage.passports_reviewed)
         : coverage.pairs_reviewed,
     total =
-      kind === "passport" ? coverage.passports_total : coverage.pairs_total;
+      kind === "passport" ? (reviewMode === "text" ? coverage.stock_total : coverage.passports_total) : coverage.pairs_total;
   return (
     <div className="section-gap">
       <PageTitle
@@ -477,13 +516,14 @@ export function QualityPage() {
                   "Проверка завершена, доступные метрики рассчитаны",
                 )
               )
-                setRevision((value) => value + 1);
+                setRevision((value) => value + 1); onReviewed?.();
             }}
           >
             Завершить экспертную проверку
           </button>
         }
       />
+      <label>Расчёт для ручной проверки<select value={jobId} onChange={e=>{setJobId(e.target.value);setOffset(0);setSelectedId("");}}><option value="">Последний завершённый</option>{runs.data?.runs.map(r=><option key={r.id} value={r.id}>{new Date(r.created_at).toLocaleString("ru-RU")} · {r.kind} · {r.id.slice(0,8)}</option>)}</select></label>
       <div className="tabs">
         <button
           className={kind === "passport" ? "active" : ""}
@@ -492,7 +532,7 @@ export function QualityPage() {
             setOffset(0);
           }}
         >
-          Параметры и категории
+          Проверка МТР
         </button>
         <button
           className={kind === "candidate" ? "active" : ""}
@@ -508,9 +548,12 @@ export function QualityPage() {
           {kind === "passport" ? "паспортов" : "пар"}
         </span>
       </div>
+      {kind === "passport" && <label>Что проверяем<select aria-label="Режим проверки паспорта" value={reviewMode} onChange={e=>{setReviewMode(e.target.value as typeof reviewMode);setPassportKind("residual");setUnreviewed(false);setOffset(0);}}><option value="text">Совпадение названия · дополнительная метрика</option><option value="parameters">H1 · Извлечение технических параметров</option><option value="category">H2 · Только категория</option></select></label>}
       <div className="split queue-layout">
         <aside className="panel compact stack">
-          <h3>Очередь проверки</h3>
+          <h3>Все паспорта и пары сессии</h3>
+          <label>На странице<select aria-label="Позиций на странице" value={pageSize} onChange={e => { setPageSize(Number(e.target.value)); setOffset(0); }}><option value={10}>10</option><option value={25}>25</option><option value={50}>50</option><option value={100}>100</option></select></label>
+          {kind === "passport" && reviewMode !== "text" && <label>Тип позиции<select value={passportKind} onChange={e => { setPassportKind(e.target.value); setOffset(0); }}><option value="">Все паспорта</option><option value="residual">Остатки Excel</option><option value="requirement">Потребности</option></select></label>}
           <input
             placeholder="Поиск позиции"
             aria-label="Поиск позиции"
@@ -569,7 +612,7 @@ export function QualityPage() {
                       row.target.residual?.source_text}
                 </span>
                 <small>
-                  {row.review ? "Проверено" : "Не проверено"} ·{" "}
+                  {(kind === "passport" ? reviewedInMode(row,reviewMode) : !!row.review) ? "Проверено" : "Не проверено"} ·{" "}
                   {kind === "passport"
                     ? row.target.kind === "requirement"
                       ? "Потребность"
@@ -590,11 +633,15 @@ export function QualityPage() {
             <Loading />
           ) : selected ? (
             <>
+              <div className="row between"><button className="btn" disabled={!rows.data || (offset === 0 && rows.data.items[0]?.target.id === selectedId)} onClick={() => { const index = rows.data!.items.findIndex(r => r.target.id === selectedId); if (index > 0) setSelectedId(rows.data!.items[index - 1].target.id); else { lastOnPage.current=true; setOffset(Math.max(0, offset - pageSize)); } }}>Предыдущая позиция</button><button className="btn" onClick={next}>Следующая позиция</button></div>
               <div
                 key={`${selected.target.id}-${selected.review?.updated_at || "new"}`}
               >
                 {kind === "passport" ? (
                   <PassportReview
+                    key={reviewMode}
+                    mode={reviewMode}
+                    schema={rows.data?.schema}
                     row={selected}
                     disabled={disabled}
                     onSave={save}
@@ -638,7 +685,7 @@ export function QualityPage() {
                         "Отметка проверки снята",
                       )
                     )
-                      setRevision((value) => value + 1);
+                      setRevision((value) => value + 1); onReviewed?.();
                   }}
                 >
                   Снять отметку проверки
@@ -651,7 +698,7 @@ export function QualityPage() {
           <Pagination
             offset={offset}
             total={rows.data?.total || 0}
-            pageSize={10}
+            pageSize={pageSize}
             onChange={setOffset}
             busy={rows.loading}
           />

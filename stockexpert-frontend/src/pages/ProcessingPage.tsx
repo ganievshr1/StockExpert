@@ -56,12 +56,11 @@ export function ProcessingPage() {
   const index = groups.findIndex((group) =>
     group.stages.includes(job.stage || ""),
   );
-  const next =
-    session.status === "TAXONOMY_REVIEW"
-      ? "taxonomy"
-      : session.status === "MATCHED"
-        ? "shortlist"
-        : "data";
+  const next = ["TAXONOMY_REVIEW", "H1_READY"].includes(session.status)
+    ? "taxonomy"
+    : session.status === "MATCHED"
+      ? "shortlist"
+      : "data";
   return (
     <div className="section-gap">
       <PageTitle
@@ -92,7 +91,11 @@ export function ProcessingPage() {
         </div>
         <Progress value={session.progress} />
         <small>
-          {session.llm_config.label} ·{" "}
+          H1:{" "}
+          {session.normalization_method === "regex"
+            ? "Регулярки · CPU"
+            : session.llm_config.label}{" "}
+          · H2: {session.llm_config.label} ·{" "}
           {w.streamFallback
             ? "Статус обновляется опросом сервера"
             : "Статус обновляется автоматически"}
@@ -101,6 +104,7 @@ export function ProcessingPage() {
           {groups.map((group, i) => {
             const completed =
               session.status === "MATCHED" ||
+              (i <= 1 && session.status === "H1_READY") ||
               (i < index && index >= 0) ||
               (i <= 2 && session.status === "TAXONOMY_REVIEW");
             const running = w.active && index === i;
@@ -172,7 +176,9 @@ export function ProcessingPage() {
           ) : (
             <button className="btn-primary" onClick={() => w.setTab(next)}>
               {next === "taxonomy"
-                ? "Проверить классификатор"
+                ? session.status === "H1_READY"
+                  ? "Перейти к H2"
+                  : "Проверить классификатор"
                 : next === "shortlist"
                   ? "Открыть подбор"
                   : "Продолжить подготовку"}

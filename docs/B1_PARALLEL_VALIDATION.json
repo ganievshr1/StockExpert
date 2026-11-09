@@ -1,0 +1,18 @@
+{
+  "release": "3.9.13-b1.2",
+  "date": "2026-11-07",
+  "launcher_revision": 2,
+  "backend_tests_passed": 419,
+  "frontend_tests_passed": 79,
+  "frontend_build": "passed",
+  "launcher_tests_passed": 19,
+  "installer": "original version and already-applied parallel patch, repeat apply, backup preservation, conflict and corrupted payload checks passed",
+  "launcher_fix": "Pinned selected projects; stopped frontend support; backend network reuse; exact duplicate frontend stop after successful builds; UI recovery attempt on failure.",
+  "limits": [
+    "No deployment to user WSL or real Docker build was performed in this environment.",
+    "GPU selection/OOM/thread safety tests use controlled model and CUDA doubles.",
+    "The actual 12533-row catalogue and RTX 4060 were not benchmarked.",
+    "No acceleration value or confirmation of B1 is claimed.",
+    "The full confirmation protocol rate is unchanged; parallel profile is diagnostic only."
+  ]
+}

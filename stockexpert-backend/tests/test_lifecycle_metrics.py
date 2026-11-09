@@ -51,7 +51,7 @@ def test_queued_cancellation_and_no_gold_metrics(client,auth):
     assert metrics['timing']['measured'] is False
     r=client.get(f'/api/v1/metrics/{sid}/export',headers=auth)
     wb=load_workbook(BytesIO(r.content))
-    assert wb.sheetnames==['Метрики сессии','Время этапов','Сжатие кандидатов']
+    assert wb.sheetnames==['Метрики сессии','H1 H2 H3 по эталону','Время этапов','Сжатие кандидатов']
     assert wb.active['A2'].value==sid
 
 def test_timing_cancellation_checkpoint(client,auth):

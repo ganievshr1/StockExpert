@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "StockExpert",
-    "version": "3.7.0"
+    "version": "3.9.12"
   },
   "paths": {
     "/api/v1/auth/token": {
@@ -545,6 +545,58 @@
                 "schema": {
                   "$ref": "#/components/schemas/DeletedSession"
                 }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/procurement/sessions/{sid}/normalization-method": {
+      "put": {
+        "summary": "Select Normalization Method",
+        "operationId": "select_normalization_method_api_v1_procurement_sessions__sid__normalization_method_put",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "sid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Sid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NormalizationSelection"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
               }
             }
           },
@@ -1540,6 +1592,72 @@
         ],
         "responses": {
           "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/pipeline/{sid}/normalization-review": {
+      "get": {
+        "summary": "Normalization Review",
+        "description": "Problem rows are visible before matching, including their source locations.",
+        "operationId": "normalization_review_api_v1_pipeline__sid__normalization_review_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "sid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Sid"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
@@ -2640,6 +2758,212 @@
         ]
       }
     },
+    "/api/v1/procurement/sessions/{sid}/taxonomy-mode": {
+      "put": {
+        "summary": "Select Taxonomy Mode",
+        "operationId": "select_taxonomy_mode_api_v1_procurement_sessions__sid__taxonomy_mode_put",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "sid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Sid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaxonomySelection"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/procurement/sessions/{sid}/comparison-rules": {
+      "put": {
+        "summary": "Comparison Rules",
+        "operationId": "comparison_rules_api_v1_procurement_sessions__sid__comparison_rules_put",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "sid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Sid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SchemaDraft"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/developer/comparisons": {
+      "get": {
+        "tags": [
+          "Сравнение гипотез"
+        ],
+        "summary": "Comparisons",
+        "operationId": "comparisons_api_v1_developer_comparisons_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "hypothesis",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "enum": [
+                "H1",
+                "H2",
+                "H3"
+              ],
+              "type": "string",
+              "title": "Hypothesis"
+            }
+          },
+          {
+            "name": "source",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "enum": [
+                "manual",
+                "automatic"
+              ],
+              "type": "string",
+              "title": "Source"
+            }
+          },
+          {
+            "name": "dataset_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dataset Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/health/live": {
       "get": {
         "summary": "Live",
@@ -3079,6 +3403,22 @@
               "type": "string",
               "title": "Sid"
             }
+          },
+          {
+            "name": "job_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Job Id"
+            }
           }
         ],
         "responses": {
@@ -3147,6 +3487,22 @@
             }
           },
           {
+            "name": "job_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Job Id"
+            }
+          },
+          {
             "name": "limit",
             "in": "query",
             "required": false,
@@ -3204,6 +3560,42 @@
                 }
               ],
               "title": "Requirement Id"
+            }
+          },
+          {
+            "name": "passport_kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "residual",
+                    "requirement"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Passport Kind"
+            }
+          },
+          {
+            "name": "review_mode",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "all",
+                "text",
+                "parameters",
+                "category"
+              ],
+              "type": "string",
+              "default": "all",
+              "title": "Review Mode"
             }
           }
         ],
@@ -3349,6 +3741,16 @@
             "schema": {
               "type": "string",
               "title": "Job Id"
+            }
+          },
+          {
+            "name": "historical",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Historical"
             }
           }
         ],
@@ -3906,10 +4308,1454 @@
           }
         }
       }
+    },
+    "/api/v1/developer/references": {
+      "get": {
+        "tags": [
+          "Для разработчиков"
+        ],
+        "summary": "References",
+        "operationId": "references_api_v1_developer_references_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "Для разработчиков"
+        ],
+        "summary": "Upload Reference",
+        "operationId": "upload_reference_api_v1_developer_references_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_reference_api_v1_developer_references_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/developer/references/{ident}/download": {
+      "get": {
+        "tags": [
+          "Для разработчиков"
+        ],
+        "summary": "Download Reference",
+        "operationId": "download_reference_api_v1_developer_references__ident__download_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "ident",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Ident"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/developer/references/{ident}/sessions": {
+      "get": {
+        "tags": [
+          "Для разработчиков"
+        ],
+        "summary": "Sessions",
+        "operationId": "sessions_api_v1_developer_references__ident__sessions_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "ident",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Ident"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/developer/references/{ident}/evaluate": {
+      "post": {
+        "tags": [
+          "Для разработчиков"
+        ],
+        "summary": "Evaluate",
+        "operationId": "evaluate_api_v1_developer_references__ident__evaluate_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "ident",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Ident"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Selection"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/developer/references/{ident}/results": {
+      "get": {
+        "tags": [
+          "Для разработчиков"
+        ],
+        "summary": "Results",
+        "operationId": "results_api_v1_developer_references__ident__results_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "ident",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Ident"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/developer/evaluations/{ident}": {
+      "get": {
+        "tags": [
+          "Для разработчиков"
+        ],
+        "summary": "Details",
+        "operationId": "details_api_v1_developer_evaluations__ident__get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "ident",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Ident"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/developer/references/{ident}/export": {
+      "get": {
+        "tags": [
+          "Для разработчиков"
+        ],
+        "summary": "Export",
+        "operationId": "export_api_v1_developer_references__ident__export_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "ident",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Ident"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/developer/regex-experiments": {
+      "post": {
+        "tags": [
+          "Эксперимент: регулярные выражения"
+        ],
+        "summary": "Create",
+        "operationId": "create_api_v1_developer_regex_experiments_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartRegexExperiment"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Эксперимент: регулярные выражения"
+        ],
+        "summary": "List Experiments",
+        "operationId": "list_experiments_api_v1_developer_regex_experiments_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "dataset_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dataset Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 30,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/developer/regex-experiments/xlsx": {
+      "post": {
+        "tags": [
+          "Эксперимент: регулярные выражения"
+        ],
+        "summary": "Create From Xlsx",
+        "operationId": "create_from_xlsx_api_v1_developer_regex_experiments_xlsx_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_create_from_xlsx_api_v1_developer_regex_experiments_xlsx_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/developer/regex-experiments/{ident}": {
+      "get": {
+        "tags": [
+          "Эксперимент: регулярные выражения"
+        ],
+        "summary": "Detail",
+        "operationId": "detail_api_v1_developer_regex_experiments__ident__get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "ident",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Ident"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/developer/regex-experiments/{ident}/passports": {
+      "get": {
+        "tags": [
+          "Эксперимент: регулярные выражения"
+        ],
+        "summary": "Passports",
+        "operationId": "passports_api_v1_developer_regex_experiments__ident__passports_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "ident",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Ident"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          },
+          {
+            "name": "review_only",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Review Only"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/developer/regex-experiments/{ident}/export": {
+      "get": {
+        "tags": [
+          "Эксперимент: регулярные выражения"
+        ],
+        "summary": "Export",
+        "operationId": "export_api_v1_developer_regex_experiments__ident__export_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "ident",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Ident"
+            }
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^(json|csv|passports_csv)$",
+              "default": "json",
+              "title": "Format"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/laboratory/{sid}": {
+      "get": {
+        "summary": "Dashboard",
+        "operationId": "dashboard_api_v1_laboratory__sid__get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "sid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Sid"
+            }
+          },
+          {
+            "name": "job_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/laboratory/{sid}/recalculate": {
+      "post": {
+        "summary": "Recalculate",
+        "operationId": "recalculate_api_v1_laboratory__sid__recalculate_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "sid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Sid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Action"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/laboratory/{sid}/reset": {
+      "post": {
+        "summary": "Reset",
+        "operationId": "reset_api_v1_laboratory__sid__reset_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "sid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Sid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Action"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/laboratory/{sid}/history/{rid}/recalculate": {
+      "post": {
+        "summary": "Restore",
+        "operationId": "restore_api_v1_laboratory__sid__history__rid__recalculate_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "sid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Sid"
+            }
+          },
+          {
+            "name": "rid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Rid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/laboratory/{sid}/h2-check": {
+      "post": {
+        "summary": "H2 Check",
+        "operationId": "h2_check_api_v1_laboratory__sid__h2_check_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "sid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Sid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExperimentInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/laboratory/{sid}/experiments": {
+      "post": {
+        "summary": "Start Experiment",
+        "operationId": "start_experiment_api_v1_laboratory__sid__experiments_post",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "sid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Sid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExperimentInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/laboratory/{sid}/methods": {
+      "get": {
+        "summary": "Methods",
+        "operationId": "methods_api_v1_laboratory__sid__methods_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "sid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Sid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/laboratory/{sid}/export": {
+      "get": {
+        "summary": "Export",
+        "operationId": "export_api_v1_laboratory__sid__export_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "sid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Sid"
+            }
+          },
+          {
+            "name": "job_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/runs/{sid}/{job_id}/export": {
+      "get": {
+        "tags": [
+          "Выгрузка результатов расчёта"
+        ],
+        "summary": "Export Run",
+        "operationId": "export_run_api_v1_runs__sid___job_id__export_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "sid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Sid"
+            }
+          },
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          },
+          {
+            "name": "stage",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "all",
+                "h1",
+                "h2",
+                "h3"
+              ],
+              "type": "string",
+              "default": "h1",
+              "title": "Stage"
+            }
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "json",
+                "xlsx"
+              ],
+              "type": "string",
+              "default": "json",
+              "title": "Format"
+            }
+          },
+          {
+            "name": "item_kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "residual",
+                "requirement",
+                "all"
+              ],
+              "type": "string",
+              "default": "residual",
+              "title": "Item Kind"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/laboratory/{sid}/experiments/{experiment_id}/export": {
+      "get": {
+        "tags": [
+          "Выгрузка результатов расчёта"
+        ],
+        "summary": "Export Experiment",
+        "operationId": "export_experiment_api_v1_laboratory__sid__experiments__experiment_id__export_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "sid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Sid"
+            }
+          },
+          {
+            "name": "experiment_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Experiment Id"
+            }
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "json",
+                "xlsx"
+              ],
+              "type": "string",
+              "default": "json",
+              "title": "Format"
+            }
+          },
+          {
+            "name": "method",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 100
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Method"
+            }
+          },
+          {
+            "name": "stage",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "all",
+                "h1",
+                "h2",
+                "h3"
+              ],
+              "type": "string",
+              "default": "all",
+              "title": "Stage"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/laboratory/{sid}/history/{revision_id}/export": {
+      "get": {
+        "tags": [
+          "Выгрузка результатов расчёта"
+        ],
+        "summary": "Export Revision",
+        "operationId": "export_revision_api_v1_laboratory__sid__history__revision_id__export_get",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "sid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Sid"
+            }
+          },
+          {
+            "name": "revision_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Revision Id"
+            }
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "json",
+                "xlsx"
+              ],
+              "type": "string",
+              "default": "json",
+              "title": "Format"
+            }
+          },
+          {
+            "name": "stage",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "all",
+                "h1",
+                "h2",
+                "h3"
+              ],
+              "type": "string",
+              "default": "all",
+              "title": "Stage"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
     "schemas": {
+      "Action": {
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "title": "Job Id"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "manual",
+              "automatic"
+            ],
+            "title": "Source"
+          },
+          "dataset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dataset Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "job_id",
+          "source"
+        ],
+        "title": "Action"
+      },
       "Approval": {
         "properties": {
           "freeze_version": {
@@ -3930,6 +5776,38 @@
           "freeze_version"
         ],
         "title": "Approval"
+      },
+      "Body_create_from_xlsx_api_v1_developer_regex_experiments_xlsx_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "title": "File"
+          },
+          "request_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Request Id"
+          },
+          "dataset_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dataset Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file",
+          "request_id"
+        ],
+        "title": "Body_create_from_xlsx_api_v1_developer_regex_experiments_xlsx_post"
       },
       "Body_login_api_v1_auth_token_post": {
         "properties": {
@@ -4001,6 +5879,20 @@
           "file"
         ],
         "title": "Body_replace_document_api_v1_procurement_sessions__sid__documents__did__replace_post"
+      },
+      "Body_upload_reference_api_v1_developer_references_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_upload_reference_api_v1_developer_references_post"
       },
       "Body_upload_requirement_api_v1_procurement_sessions__sid__upload_requirement_post": {
         "properties": {
@@ -4183,6 +6075,124 @@
         ],
         "title": "DeletedSessions"
       },
+      "ExperimentInput": {
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "title": "Job Id"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "manual",
+              "automatic"
+            ],
+            "title": "Source"
+          },
+          "dataset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dataset Id"
+          },
+          "methods": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 20,
+            "minItems": 1,
+            "title": "Methods"
+          },
+          "h1_mode": {
+            "type": "string",
+            "enum": [
+              "attributes",
+              "name_exact"
+            ],
+            "title": "H1 Mode",
+            "default": "attributes"
+          },
+          "seed": {
+            "type": "integer",
+            "maximum": 1000000.0,
+            "minimum": 0.0,
+            "title": "Seed",
+            "default": 42
+          },
+          "train_fraction": {
+            "type": "number",
+            "maximum": 0.9,
+            "minimum": 0.2,
+            "title": "Train Fraction",
+            "default": 0.7
+          },
+          "clusters": {
+            "type": "integer",
+            "maximum": 1000.0,
+            "minimum": 2.0,
+            "title": "Clusters",
+            "default": 8
+          },
+          "min_cluster_size": {
+            "type": "integer",
+            "maximum": 1000.0,
+            "minimum": 2.0,
+            "title": "Min Cluster Size",
+            "default": 5
+          },
+          "repeats": {
+            "type": "integer",
+            "maximum": 10.0,
+            "minimum": 1.0,
+            "title": "Repeats",
+            "default": 1
+          },
+          "profile_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile Id"
+          },
+          "h2_name_weight": {
+            "type": "number",
+            "maximum": 10.0,
+            "exclusiveMinimum": 0.0,
+            "title": "H2 Name Weight",
+            "default": 1.0
+          },
+          "h2_attribute_weight": {
+            "type": "number",
+            "maximum": 10.0,
+            "exclusiveMinimum": 0.0,
+            "title": "H2 Attribute Weight",
+            "default": 2.0
+          },
+          "h2_reference_confirmed": {
+            "type": "boolean",
+            "title": "H2 Reference Confirmed",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "job_id",
+          "source",
+          "methods"
+        ],
+        "title": "ExperimentInput"
+      },
       "FailedSessionDeletion": {
         "properties": {
           "session_id": {
@@ -4211,77 +6221,6 @@
         ],
         "title": "FailedSessionDeletion"
       },
-      "Feature": {
-        "properties": {
-          "key": {
-            "type": "string",
-            "pattern": "^[a-z][a-z0-9_]{0,49}$",
-            "title": "Key"
-          },
-          "label": {
-            "type": "string",
-            "title": "Label"
-          },
-          "kind": {
-            "type": "string",
-            "enum": [
-              "string",
-              "number",
-              "integer"
-            ],
-            "title": "Kind"
-          },
-          "unit": {
-            "type": "string",
-            "enum": [
-              "none",
-              "V",
-              "kV",
-              "mm",
-              "mm2",
-              "MPa",
-              "bar",
-              "m",
-              "kg",
-              "pcs"
-            ],
-            "title": "Unit",
-            "default": "none"
-          },
-          "comparison": {
-            "type": "string",
-            "enum": [
-              "eq",
-              "gte",
-              "lte",
-              "informational"
-            ],
-            "title": "Comparison",
-            "default": "informational"
-          },
-          "tolerance": {
-            "type": "number",
-            "minimum": 0.0,
-            "title": "Tolerance",
-            "default": 0
-          },
-          "aliases": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Aliases"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "key",
-          "label",
-          "kind"
-        ],
-        "title": "Feature"
-      },
       "FeatureAddition": {
         "properties": {
           "category_id": {
@@ -4289,7 +6228,7 @@
             "title": "Category Id"
           },
           "feature": {
-            "$ref": "#/components/schemas/Feature"
+            "$ref": "#/components/schemas/app__services__contracts__Feature"
           }
         },
         "additionalProperties": false,
@@ -4305,6 +6244,11 @@
           "job_id": {
             "type": "string",
             "title": "Job Id"
+          },
+          "historical": {
+            "type": "boolean",
+            "title": "Historical",
+            "default": false
           }
         },
         "type": "object",
@@ -4402,6 +6346,24 @@
           "llm_profile_id"
         ],
         "title": "ModelSelection"
+      },
+      "NormalizationSelection": {
+        "properties": {
+          "normalization_method": {
+            "type": "string",
+            "enum": [
+              "llm",
+              "regex"
+            ],
+            "title": "Normalization Method"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "normalization_method"
+        ],
+        "title": "NormalizationSelection"
       },
       "Normalize": {
         "properties": {
@@ -4513,10 +6475,23 @@
             "type": "string",
             "title": "Job Id"
           },
+          "historical": {
+            "type": "boolean",
+            "title": "Historical",
+            "default": false
+          },
           "attributes": {
             "additionalProperties": true,
             "type": "object",
             "title": "Attributes"
+          },
+          "custom_features": {
+            "items": {
+              "$ref": "#/components/schemas/app__services__expert_reference__Feature"
+            },
+            "type": "array",
+            "maxItems": 128,
+            "title": "Custom Features"
           },
           "category_reviewed": {
             "type": "boolean",
@@ -4533,6 +6508,18 @@
               }
             ],
             "title": "Category Id"
+          },
+          "expected_category": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 300
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Category"
           },
           "suitable": {
             "anyOf": [
@@ -4570,7 +6557,7 @@
           },
           "features": {
             "items": {
-              "$ref": "#/components/schemas/Feature"
+              "$ref": "#/components/schemas/app__services__contracts__Feature"
             },
             "type": "array",
             "maxItems": 50000,
@@ -4603,7 +6590,8 @@
             "enum": [
               "pending",
               "review",
-              "approved"
+              "approved",
+              "skipped"
             ],
             "title": "Taxonomy Status",
             "default": "pending"
@@ -4620,6 +6608,24 @@
           "mappings"
         ],
         "title": "SchemaDraft"
+      },
+      "Selection": {
+        "properties": {
+          "session_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 500,
+            "minItems": 1,
+            "title": "Session Ids"
+          }
+        },
+        "type": "object",
+        "required": [
+          "session_ids"
+        ],
+        "title": "Selection"
       },
       "SessionCreate": {
         "properties": {
@@ -4673,6 +6679,20 @@
               }
             ],
             "title": "Llm Profile Id"
+          },
+          "taxonomy_enabled": {
+            "type": "boolean",
+            "title": "Taxonomy Enabled",
+            "default": false
+          },
+          "normalization_method": {
+            "type": "string",
+            "enum": [
+              "llm",
+              "regex"
+            ],
+            "title": "Normalization Method",
+            "default": "llm"
           }
         },
         "additionalProperties": false,
@@ -4695,6 +6715,47 @@
         "additionalProperties": false,
         "type": "object",
         "title": "Start"
+      },
+      "StartRegexExperiment": {
+        "properties": {
+          "source_session_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Source Session Id"
+          },
+          "dataset_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Dataset Id"
+          },
+          "request_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Request Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "source_session_id",
+          "dataset_id",
+          "request_id"
+        ],
+        "title": "StartRegexExperiment"
+      },
+      "TaxonomySelection": {
+        "properties": {
+          "taxonomy_enabled": {
+            "type": "boolean",
+            "title": "Taxonomy Enabled"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "taxonomy_enabled"
+        ],
+        "title": "TaxonomySelection"
       },
       "ValidationError": {
         "properties": {
@@ -4728,6 +6789,117 @@
           "type"
         ],
         "title": "ValidationError"
+      },
+      "app__services__contracts__Feature": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{0,49}$",
+            "title": "Key"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "string",
+              "number",
+              "integer"
+            ],
+            "title": "Kind"
+          },
+          "unit": {
+            "type": "string",
+            "enum": [
+              "none",
+              "V",
+              "kV",
+              "mm",
+              "mm2",
+              "MPa",
+              "bar",
+              "m",
+              "kg",
+              "pcs",
+              "A",
+              "kW",
+              "Hz",
+              "rpm"
+            ],
+            "title": "Unit",
+            "default": "none"
+          },
+          "comparison": {
+            "type": "string",
+            "enum": [
+              "eq",
+              "gte",
+              "lte",
+              "informational"
+            ],
+            "title": "Comparison",
+            "default": "informational"
+          },
+          "tolerance": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Tolerance",
+            "default": 0
+          },
+          "aliases": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Aliases"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "key",
+          "label",
+          "kind"
+        ],
+        "title": "Feature"
+      },
+      "app__services__expert_reference__Feature": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{0,63}$",
+            "title": "Key"
+          },
+          "label": {
+            "type": "string",
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Label"
+          },
+          "unit": {
+            "type": "string",
+            "maxLength": 30,
+            "title": "Unit",
+            "default": "none"
+          },
+          "aliases": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 40,
+            "title": "Aliases"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "key",
+          "label"
+        ],
+        "title": "Feature"
       }
     },
     "securitySchemes": {

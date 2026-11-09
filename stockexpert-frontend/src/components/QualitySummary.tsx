@@ -16,7 +16,7 @@ export function QualityCards({ q }: { q: Quality }) {
       </p>
       <div className="grid sm:grid-cols-2 xl:grid-cols-4 gap-3">
         {[
-          ["F1 параметров", q.f1],
+          ["H1 · F1 текста", q.text_f1],
           ["Accuracy категорий", q.accuracy],
           ["Precision shortlist", q.precision_shortlist],
           ["Recall@150", q.recall_at_150],
@@ -28,6 +28,7 @@ export function QualityCards({ q }: { q: Quality }) {
         ))}
       </div>
       <p className="text-xs text-slate-500 mt-4">
+        Проверено текстов МТР: {c.text_reviewed || 0} / {c.stock_total || 0}. F1 технических параметров отдельно: {percent(q.f1)}.{" "}
         Проверено значений: {c.fields_checked || 0}; категорий:{" "}
         {c.categories_checked || 0}. Полностью проверено потребностей для
         Recall: {c.requirements_fully_reviewed || 0} /{" "}

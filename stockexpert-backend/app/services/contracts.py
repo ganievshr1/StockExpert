@@ -12,7 +12,7 @@ class Feature(Strict):
     key: str = Field(pattern=r'^[a-z][a-z0-9_]{0,49}$')
     label: str
     kind: Literal['string','number','integer']
-    unit: Literal['none','V','kV','mm','mm2','MPa','bar','m','kg','pcs'] = 'none'
+    unit: Literal['none','V','kV','mm','mm2','MPa','bar','m','kg','pcs','A','kW','Hz','rpm'] = 'none'
     comparison: Literal['eq','gte','lte','informational'] = 'informational'
     tolerance: float = Field(default=0,ge=0)
     aliases: list[str] = Field(default_factory=list)
@@ -36,13 +36,13 @@ class SchemaDraft(Strict):
     categories: list[Category] = Field(default_factory=list,max_length=50000)
     taxonomy_mode: Literal['sample','passports'] = 'sample'
     mapping_approved: bool = False
-    taxonomy_status: Literal['pending','review','approved'] = 'pending'
+    taxonomy_status: Literal['pending','review','approved','skipped'] = 'pending'
     analyzed_items: int = 0
     @model_validator(mode='after')
     def unique_keys(self):
         if self.taxonomy_mode=='sample' and (not self.features or not self.categories):
             raise ValueError('Legacy schema requires features and categories')
-        if self.taxonomy_mode=='passports' and self.taxonomy_status!='pending' and (not self.categories or not self.features):
+        if self.taxonomy_mode=='passports' and self.taxonomy_status not in ('pending','skipped') and (not self.categories or not self.features):
             raise ValueError('Build taxonomy from normalized passports first')
         for values in ([f.key for f in self.features],[c.id for c in self.categories]):
             if len(set(values))!=len(values): raise ValueError('Duplicate field/category identifiers')
@@ -77,7 +77,7 @@ class OpenValue(Strict):
     kind: Literal['string','number','integer']
     value: str|None
     unit: str|None
-    target_unit: Literal['none','V','kV','mm','mm2','MPa','bar','m','kg','pcs']
+    target_unit: Literal['none','V','kV','mm','mm2','MPa','bar','m','kg','pcs','A','kW','Hz','rpm']
     evidence: str|None
 
 class OpenExtraction(Strict):

@@ -3,12 +3,13 @@ from datetime import timezone
 from io import BytesIO
 from sqlalchemy import select,func
 from openpyxl import Workbook
-from app.db import ProcurementSession,Item,Document,Job,Match,StageTiming,now
+from app.db import ProcurementSession,Item,Document,Job,Match,StageTiming,ExpertDataset,ExpertEvaluation,now
 from app.services.execution import seconds
 from app.services.quality import evaluate
 from app.services.inventory import available_item_ids
 from app.services.model_registry import session_config
 from app.services.taxonomy import is_new,root_id
+from app.services.execution import ACTIVE_STATUSES
 
 STAGES={'PARSING':'Распознавание и чтение файлов','SCHEMA_DISCOVERY':'Определение столбцов Excel',
 'PASSPORT_NORMALIZATION':'Нормализация всех JSON-паспортов','TAXONOMY_BUILD':'Таксономия по всем нормализованным паспортам',
@@ -23,6 +24,9 @@ def measurement(db,sid):
     items=list(db.scalars(select(Item).where(Item.session_id==sid,Item.kind=='residual')))
     eligible=[i for i in items if (i.document_id,i.sheet) in mappings and i.row_index>mappings[(i.document_id,i.sheet)]['header_row']]
     normalized=[i for i in eligible if i.passport is not None]
+    before_taxonomy = is_new(schema) and not schema.get('categories')
+    if before_taxonomy:
+        features=list({f['key']:f for i in normalized for f in i.passport.get('normalized_features',[])}.values())
     issue_counts=Counter(x.get('code','UNKNOWN') for i in normalized for x in (i.issues or []))
     by_field=defaultdict(list)
     category_keys={c['id']:set(c.get('feature_keys',[])) for c in schema.get('categories',[])}
@@ -31,11 +35,11 @@ def measurement(db,sid):
             for key in category_keys.get(item.category,{'name'}):by_field[key].append(item)
     fields=[]
     for f in features:
-        applicable=by_field[f['key']] if is_new(schema) else normalized
+        applicable=by_field[f['key']] if is_new(schema) and not before_taxonomy else normalized
         filled=sum(i.passport.get('attributes',{}).get(f['key']) is not None for i in applicable)
         confirmed=sum(i.passport.get('attributes',{}).get(f['key']) is not None and bool(i.passport.get('evidence',{}).get(f['key'],{}).get('quote')) for i in applicable)
         fields.append({'key':f['key'],'label':f['label'],'unit':f['unit'],'filled':filled,'confirmed':confirmed,
-                       'applicable_rows':len(applicable),'missing':len(applicable)-filled,'fill_rate':filled/len(applicable) if applicable else None,
+                       'applicable_rows':len(applicable),'missing':len(applicable)-filled,'fill_rate':filled/len(applicable) if applicable and not before_taxonomy else None,
                        'evidence_rate':confirmed/filled if filled else None})
     total_slots=sum(f['applicable_rows'] for f in fields);filled_total=sum(f['filled'] for f in fields)
     counts=Counter(i.category or '__unclassified__' for i in normalized)
@@ -93,9 +97,15 @@ def measurement(db,sid):
         'session_processing_seconds':round(all_seconds,3) if segments else None,
         'note':'Операционные показатели, не F1/Accuracy/Recall. Число новых паспортов — сохранённые результаты извлечения с версии 3.3; затраченные токены и денежная экономия не оцениваются.'}
     quality=evaluate(db,sid)
+    expert_evaluations=[]
+    active=any(j.status in ACTIVE_STATUSES for j in jobs)
+    for evaluation, reference in db.execute(select(ExpertEvaluation,ExpertDataset).join(ExpertDataset,ExpertEvaluation.dataset_id==ExpertDataset.id).where(ExpertEvaluation.session_id==sid,ExpertDataset.organization_id==s.organization_id).order_by(ExpertEvaluation.updated_at.desc(),ExpertEvaluation.id)):
+        expert_evaluations.append({'id':evaluation.id,'reference_title':reference.title,'reference_version':reference.version,
+            'status':'WAITING' if active else evaluation.status,'updated_at':evaluation.updated_at.isoformat(),
+            'result':{'note':'Ожидание завершения текущего расчёта'} if active else {k:v for k,v in evaluation.result.items() if k not in ('rows','pairs','source_jobs')}})
     missing_reason='Нужна независимая эталонная разметка; в этой версии не подключена.'
     return {'session_id':sid,'session_title':s.title,'session_status':s.status,'generated_at':now().isoformat(),
-      'quality':quality,'efficiency':efficiency,'base_snapshot':s.base_snapshot or {},
+      'quality':quality,'efficiency':efficiency,'base_snapshot':s.base_snapshot or {},'expert_evaluations':expert_evaluations,
       'targets':[{'metric':'F1','label':'F1 извлечения параметров','target':0.94,'value':quality['f1'],'reason':'По проверенным параметрам после завершения проверки.'},
                  {'metric':'Accuracy','label':'Accuracy категорий','target':0.85,'value':quality['accuracy'],'reason':'По проверенным категориям после завершения проверки.'},
                  {'metric':'Recall@150','label':'Recall@150','target':0.985,'value':quality['recall_at_150'],'reason':'Только по потребностям с проверкой всех пар запуска и хотя бы одним подходящим запасом.'}],
@@ -103,14 +113,16 @@ def measurement(db,sid):
                     'eligible_rows':len(eligible),'normalized_rows':len(normalized),'pending_rows':len(eligible)-len(normalized),
                     'normalization_rate':len(normalized)/len(eligible) if eligible else None,
                     'filled_parameters':filled_total,'parameter_slots':total_slots,
-                    'fill_rate':filled_total/total_slots if total_slots else None,
+                    'fill_rate':filled_total/total_slots if total_slots and not before_taxonomy else None,
                     'evidence_rate':sum(f['confirmed'] for f in fields)/filled_total if filled_total else None,
-                    'fields':fields,'issues':dict(issue_counts)},
+                    'fields':fields,'issues':dict(issue_counts),'before_taxonomy':before_taxonomy,
+                    'note':'До H2 показаны извлечённые значения; применимость полей к типам изделий и полнота заполнения ещё не определены.' if before_taxonomy else None},
       'taxonomy':{'schema_categories':len(categories),'used_categories':sum(c['count']>0 for c in categories),
                   'classified_rows':len(normalized)-counts.get('__unclassified__',0),'unclassified_rows':counts.get('__unclassified__',0),
                   'coverage':(len(normalized)-counts.get('__unclassified__',0))/len(normalized) if normalized else None,'categories':categories,
                   'method':'All normalized JSON passports → material families from name → material-specific subcategories and feature schemas.' if is_new(schema) else 'Legacy: LLM taxonomy from source samples before normalization.',
                   'analyzed_items':schema.get('analyzed_items',0),'material_types':sum(not c.get('parent_id') for c in schema.get('categories',[]))},
+      'normalization_method':s.normalization_method,
       'llm':{'selected':session_config(db,s).model_dump(),'legacy':not bool(s.llm_config),
              'jobs':[{'job_id':j.id,'kind':j.kind,'status':j.status,'llm_config':j.params.get('llm_config'),'runtime':j.params.get('runtime',{})} for j in jobs]},
       'matching':{'source_job_id':match_job.id if match_job else None,'runtime':match_job.params.get('runtime',{}) if match_job else {},
@@ -123,7 +135,7 @@ def measurement(db,sid):
                 'normalization_seconds':round(totals.get('EXTRACTION_CLASSIFICATION',0)+totals.get('PASSPORT_NORMALIZATION',0),3),
                 'taxonomy_seconds':round(totals.get('TAXONOMY_BUILD',0) if is_new(schema) else totals.get('SCHEMA_DISCOVERY',0),3),
                 'matching_seconds':round(sum(totals.get(k,0) for k in MATCH_STAGES),3),
-                'normalization_rows_per_second':len(normalized)/totals['EXTRACTION_CLASSIFICATION'] if totals.get('EXTRACTION_CLASSIFICATION') else None,
+                'normalization_rows_per_second':len(normalized)/(totals.get('EXTRACTION_CLASSIFICATION',0)+totals.get('PASSPORT_NORMALIZATION',0)) if (totals.get('EXTRACTION_CLASSIFICATION',0)+totals.get('PASSPORT_NORMALIZATION',0)) else None,
                 'stages':[{'stage':k,'label':STAGES.get(k,k),'seconds':round(v,3)} for k,v in totals.items()],
                 'attempts':len({d['attempt'] for d in durations}),'segments':durations,
                 'jobs':[{'job_id':j.id,'kind':j.kind,'status':j.status,'seconds':round(job_times[j.id],3) if j.id in job_times else None} for j in jobs],
@@ -135,8 +147,16 @@ def add_sheets(wb,data):
     ws.append([sid,'Сессия','Название',data['session_title'],''])
     for key,value in data['llm']['selected'].items():ws.append([sid,'Модель сессии',key,value,''])
     for t in data['targets']:ws.append([sid,'Качество',t['metric'],t['value'] if t['value'] is not None else 'Не измерено',f"Цель {t['target']:.1%}. {t['reason']}"])
+    h=wb.create_sheet('H1 H2 H3 по эталону')
+    h.append(['Эталон','Версия','Статус','Метрика','Значение (доля)','Цель','Числитель','Знаменатель','Формула с числами','Охват','Причина отсутствия'])
+    for evaluation in data.get('expert_evaluations',[]):
+        for metric in evaluation['result'].get('hypotheses',[]):
+            h.append([evaluation['reference_title'],evaluation['reference_version'],evaluation['status'],metric['id']+' '+metric['label'],metric['value'],metric['target'],metric['numerator'],metric['denominator'],metric['substitution'],metric['scope'],metric['reason']])
+        population=evaluation['result'].get('h3_population',{})
+        if population:
+            h.append([evaluation['reference_title'],evaluation['reference_version'],evaluation['status'],'Доля отбора из всей базы',population['retained_share'],None,population['top150'],population['pairs_total'],'Top150 / (строк базы × потребностей)','Это доля кандидатов, отдельный показатель от Recall',None])
     q=data['quality']
-    for key in ('job_id','finalized','finalized_at','f1','accuracy','precision_shortlist','recall_at_150'):ws.append([sid,'Экспертная оценка',key,q.get(key),'Доля 0–1; только проверенная выборка'])
+    for key in ('job_id','finalized','finalized_at','f1','text_f1','text_precision','text_recall','accuracy','precision_shortlist','recall_at_150'):ws.append([sid,'Экспертная оценка',key,q.get(key),'Доля 0–1; только проверенная выборка'])
     for key,value in q['coverage'].items():ws.append([sid,'Объём проверки',key,value,''])
     for f in q['fields']:ws.append([sid,'F1 параметра',f['key'],f['f1'],f"TP={f['tp']}; FP={f['fp']}; FN={f['fn']}; проверено={f['checked']}"])
     for section in ('efficiency','extraction','taxonomy','matching'):
@@ -151,7 +171,7 @@ def add_sheets(wb,data):
     for r in data['timing']['segments']:t.append([sid,r['job_id'],r['attempt'],r['label'],r['started_at'],r['finished_at'],r['seconds'],r['outcome']])
     p=wb.create_sheet('Сжатие кандидатов');p.append(['ID сессии','Потребность ID','До отбора','Найдено поиском','Shortlist','Top 150','Сжатие раз','Сокращение доля','Противоречия','Нужна проверка'])
     for r in data['matching']['requirements']:p.append([sid,r['requirement_id'],r['before'],r['retrieved'],r['shortlisted'],r['top150'],r['compression_factor'],r['reduction_rate'],r['contradicted'],r['review']])
-    for sheet in (ws,t,p):
+    for sheet in (ws,t,p,h):
         sheet.freeze_panes='A2';sheet.auto_filter.ref=sheet.dimensions
         for row in sheet:
             for cell in row:

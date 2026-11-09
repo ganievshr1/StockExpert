@@ -173,7 +173,7 @@ def test_selected_model_through_every_pipeline_stage(profile,client,auth,monkeyp
         content=json.dumps(result,ensure_ascii=False)
         return httpx.Response(200,json={'choices':[{'finish_reason':'stop','message':{'content':content}}]} if config.provider=='deepseek' else {'done_reason':'stop','message':{'content':content}})
     mock_http(monkeypatch,handler)
-    sid=create(client,auth,profile)['id'];url=f'{API}/procurement/sessions/{sid}'
+    sid=create(client,auth,profile,taxonomy_enabled=True)['id'];url=f'{API}/procurement/sessions/{sid}'
     wb=Workbook();wb.active.append(['Тип','Описание']);wb.active.append(['Кабель','Кабель 3,3кВ']);out=BytesIO();wb.save(out)
     assert client.post(url+'/upload-residuals',headers=auth,files={'file':('stock.xlsx',out.getvalue())}).status_code==201
     assert client.post(url+'/upload-requirement',headers=auth,files={'file':('need.txt','Кабель 3,3кВ'.encode())}).status_code==201
@@ -227,47 +227,50 @@ def test_local_structured_failures_are_actionable(monkeypatch,content,thinking,m
         with pytest.raises(llm.LLMError,match=match):llm.structured('extract',{},SCHEMA)
 
 
-def test_changing_model_reprocesses_base_without_resurrecting_stock(client,auth,base,monkeypatch):
+def test_changing_model_reuses_base_without_resurrecting_stock(client,auth,base,monkeypatch):
     source,objects,calls,_,old_item=base
     # Original XLSX still contains a second, already consumed row.
     with SessionLocal() as db:
         original=db.get(Item,old_item);doc=db.get(Document,original.document_id)
         wb=Workbook();wb.active.title='Stock';wb.active.append(['Описание']);wb.active.append(['Остаток Кабель 3,3кВ']);wb.active.append(['Уже использованный Кабель 3,3кВ']);out=BytesIO();wb.save(out);objects[doc.object_key]=out.getvalue()
         db.add(Item(session_id=source,document_id=doc.id,kind='residual',sheet='Stock',row_index=3,raw={'0':'Уже использованный Кабель 3,3кВ'},source_text='Уже использованный Кабель 3,3кВ',passport=original.passport,category='cable'))
+        # Unnormalized blank rows must not become new stock extraction requests.
+        db.add(Item(session_id=source,document_id=doc.id,kind='residual',sheet='Stock',row_index=4,raw={},source_text=''))
         from app.services.inventory import ensure_inventory
         db.flush();ensure_inventory(db,db.get(ProcurementSession,source));db.flush()
         used=db.scalar(select(Item).where(Item.session_id==source,Item.row_index==3));db.get(StockPosition,used.stock_id).state='USED';db.commit()
-    target=create(client,auth,'qwen3-8b',base_session_id=source)
-    assert target['approved'] is False and target['schema_doc']=={}
-    assert target['base_snapshot']['reused_passports'] is False
+    target=create(client,auth,'qwen3-8b',base_session_id=source,taxonomy_enabled=True)
+    assert target['approved'] is True and target['status']=='BASE_READY'
+    assert target['base_snapshot']['reused_passports'] is True
+    assert target['llm_config']['profile_id']=='qwen3-8b'
+    assert target['llm_locked'] is False
+    model_url=f"{API}/procurement/sessions/{target['id']}/llm"
+    assert client.put(model_url,headers=auth,json={'llm_profile_id':'qwen25-7b-q4'}).status_code==200
+    assert client.put(model_url,headers=auth,json={'llm_profile_id':'qwen3-8b'}).status_code==200
     with SessionLocal() as db:
         items=list(db.scalars(select(Item).where(Item.session_id==target['id'])))
-        assert len(items)==2 and all(i.passport is None for i in items)
-        assert any(i.stock_id for i in items)
-        assert db.get(Item,old_item).passport is not None
+        assert len(items)==2  # Header + available position; used position is excluded.
+        row=next(i for i in items if i.row_index==2)
+        original=db.get(Item,old_item)
+        assert row.stock_id==original.stock_id
+        expected={**original.passport,'reuse':{'session_id':source,'item_id':old_item}}
+        assert row.passport==expected
     sid=target['id']
-    client.post(f'{API}/procurement/sessions/{sid}/upload-requirement',headers=auth,files={'file':('need.txt','Кабель 3,3кВ'.encode())})
-    def model(task,data,schema):
-        if 'header_row' in schema['properties']:
-            assert len(data['first_rows'])==2
-            return {'header_row':1,'name_columns':['A'],'category_column':None}
-        if 'name_evidence' in schema['properties']:
-            return {'name':'Кабель 3,3кВ','name_evidence':'Кабель 3,3кВ','values':[{'key':'voltage_v','label':'Напряжение','kind':'number','value':'3,3','unit':'кВ','target_unit':'V','evidence':'3,3кВ'}]}
-        if 'passports' in data:return {'items':[{'item_id':x['item_id'],'material':'Кабель','subtype':None} for x in data['passports']]}
-        if 'match_id' in schema['properties']:return {'match_id':None}
-        return {'items':[data['text']]}
-    monkeypatch.setattr(llm,'structured',model)
-    jid=client.post(f'{API}/pipeline/{sid}/prepare',headers=auth).json()['task_id'];tasks.run_job.run(jid)
-    with SessionLocal() as db:
-        assert db.get(Job,jid).status=='COMPLETED',db.get(Job,jid).error
-        assert len(list(db.scalars(select(Item).where(Item.session_id==sid))))==2
-    assert client.post(f'{API}/pipeline/{sid}/approve-mapping',headers=auth).status_code==200
+    assert client.post(f'{API}/pipeline/{sid}/prepare',headers=auth).status_code==409
+    response=client.post(f'{API}/procurement/sessions/{sid}/upload-requirement',headers=auth,files={'file':('need.txt','Кабель 3,3кВ'.encode())})
+    assert response.status_code==201,response.text
     jid=client.post(f'{API}/pipeline/{sid}/run',headers=auth,json={}).json()['task_id'];tasks.run_job.run(jid)
+    assert client.put(model_url,headers=auth,json={'llm_profile_id':'qwen25-7b-q4'}).status_code==409
     with SessionLocal() as db:
-        assert db.get(Job,jid).status=='COMPLETED',db.get(Job,jid).error
-        assert db.get(Job,jid).params['normalization_counts']=={'residual':1,'requirement':1}
+        job=db.get(Job,jid)
+        assert job.status=='COMPLETED',job.error
+        assert job.params['normalization_counts']=={'requirement':1}
+        assert job.params['index_stats']=={'vectors_reused':1,'vectors_created':0}
         row=db.scalar(select(Item).where(Item.session_id==sid,Item.kind=='residual',Item.row_index==2))
-        assert row.passport['provenance']['profile_id']=='qwen3-8b' and 'reuse' not in row.passport
+        assert row.passport==expected
+        requirement=db.scalar(select(Item).where(Item.session_id==sid,Item.kind=='requirement'))
+        assert requirement.passport['provenance']['profile_id']=='qwen3-8b'
+    assert len(calls)==2  # Split/extract requirement; no mapping or stock extraction.
 
 
 def test_legacy_session_exposes_uncertainty_and_retains_recorded_model(client,auth,monkeypatch):

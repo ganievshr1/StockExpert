@@ -167,8 +167,14 @@ export function SessionOverviewPage() {
         </section>
         <section className="panel stack">
           <h3>Параметры сессии</h3>
-          <small>Модель обработки</small>
-          <p>{session.llm_config.label}</p>
+          <small>
+            H1:{" "}
+            {session.normalization_method === "regex"
+              ? "Регулярные выражения · CPU"
+              : "LLM"}
+          </small>
+          <small>H2: {session.taxonomy_enabled === false ? "отключён — поиск без категорий" : "включён — с категориями"}</small>
+          {(session.taxonomy_enabled !== false || session.normalization_method === 'llm') && <p>Модель: {session.llm_config.label}</p>}
           <div>
             <Badge value={session.status} />
           </div>
@@ -179,6 +185,9 @@ export function SessionOverviewPage() {
           </small>
           <button className="btn" onClick={() => setSettings(true)}>
             Настройки сессии
+          </button>
+          <button className="btn" onClick={() => w.setTab('metrics')}>
+            Скачать результаты расчёта
           </button>
         </section>
       </div>

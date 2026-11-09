@@ -7,6 +7,7 @@ import type {
   Feature,
 } from "../types";
 import type { Quality } from "./quality";
+import type { Evaluation } from "./developer";
 
 export interface Efficiency {
   ready: boolean;
@@ -45,6 +46,14 @@ export interface WorkspaceOverview {
   generated_at: string;
 }
 export interface Measurement {
+  expert_evaluations?: {
+    id: string;
+    reference_title: string;
+    reference_version: string;
+    status: string;
+    updated_at: string;
+    result: Evaluation["result"];
+  }[];
   generated_at: string;
   session_id: string;
   session_title: string;
@@ -58,6 +67,7 @@ export interface Measurement {
     reason: string;
   }[];
   extraction: {
+    note?: string | null;
     eligible_rows: number;
     normalized_rows: number;
     fill_rate: number | null;

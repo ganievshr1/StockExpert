@@ -1,0 +1,37 @@
+# Diagnostic performance profile, not the fixed-budget B1 confirmation profile.
+x-parallel: &parallel
+  B1_RUNTIME_PROFILE: parallel
+services:
+  backend:
+    environment: *parallel
+  worker:
+    command: [celery, -A, app.tasks:celery_app, worker, --loglevel=INFO, '--concurrency=${B1_INTERACTIVE_CONCURRENCY:-4}', --pool=threads, --prefetch-multiplier=1, -Q, interactive]
+    cpus: '4.0'
+    mem_limit: 4g
+    environment:
+      <<: *parallel
+      RERANKER_DEVICE: cpu
+      OMP_NUM_THREADS: '1'
+      MKL_NUM_THREADS: '1'
+      OPENBLAS_NUM_THREADS: '1'
+      TOKENIZERS_PARALLELISM: 'false'
+  worker-batch:
+    cpus: '1.0'
+    mem_limit: 2g
+    environment:
+      <<: *parallel
+      RERANKER_DEVICE: cpu
+      OMP_NUM_THREADS: '1'
+      MKL_NUM_THREADS: '1'
+      OPENBLAS_NUM_THREADS: '1'
+      TOKENIZERS_PARALLELISM: 'false'
+  worker-control:
+    environment: *parallel
+  worker-laboratory:
+    environment: *parallel
+  worker-regex:
+    environment: *parallel
+  worker-b1:
+    environment: *parallel
+  beat:
+    environment: *parallel

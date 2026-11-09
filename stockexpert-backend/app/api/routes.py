@@ -1,6 +1,7 @@
 import asyncio, csv, hashlib, io, json, uuid
 from pathlib import Path
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query, Request
+from typing import Literal
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query, Request
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.responses import StreamingResponse, Response
 from pydantic import BaseModel, Field, ConfigDict
@@ -23,9 +24,9 @@ from app.api.deps import get_current_user, require_editor, require_expert, own_s
 from app.core.config import settings
 from app.core.security import verify_password, create_access_token
 from app.services import storage, taxonomy as taxonomy_service
-from app.services import model_registry
+from app.services import model_registry, normalization_engine, requirement_extraction
 from app.services.llm import LLMError
-from app.services.inventory import available_item_ids, stock_state
+from app.services.inventory import available_item_ids, stock_state, lock_stock_origins
 from app.services.parsing import sheets, document_text
 from app.services.contracts import SchemaDraft
 from app.services.workflow import validate_mapping
@@ -44,6 +45,12 @@ class SessionCreate(Input):
     initiator_dept: str | None = None
     category_hint: str | None = None
     llm_profile_id: str | None = Field(default=None, max_length=80)
+    taxonomy_enabled: bool = False
+    normalization_method: Literal['llm', 'regex'] = 'llm'
+
+
+class NormalizationSelection(Input):
+    normalization_method: Literal['llm', 'regex']
 
 
 class ModelSelection(Input):
@@ -101,9 +108,12 @@ def no_active(db, sid):
 
 def enqueue(db, s, user, kind, params=None):
     require_editor(user)
+    lock_stock_origins(db, s)
     no_active(db, s.id)
+    from app.services.run_history import capture_latest
+    capture_latest(db, s)
     config = model_registry.session_config(db, s)
-    if kind != "match":
+    if normalization_engine.needs_llm(kind, s.normalization_method, s.taxonomy_enabled):
         try:
             model_registry.preflight(config)
         except LLMError as exc:
@@ -112,7 +122,8 @@ def enqueue(db, s, user, kind, params=None):
     job = Job(
         session_id=s.id,
         kind=kind,
-        params={**(params or {}), "llm_config": config.model_dump()},
+        params={**(params or {}), "llm_config": config.model_dump(),
+                "normalization_config": normalization_engine.config(s.normalization_method), "taxonomy_enabled": s.taxonomy_enabled},
     )
     db.add(job)
     db.flush()
@@ -121,7 +132,8 @@ def enqueue(db, s, user, kind, params=None):
         db,
         s.id,
         "JOB_QUEUED",
-        {"job_id": job.id, "kind": kind, "llm_config": config.model_dump()},
+        {"job_id": job.id, "kind": kind, "llm_config": config.model_dump(),
+         "normalization_config": job.params['normalization_config']},
         user.id,
     )
     db.commit()
@@ -319,6 +331,8 @@ def create_session(
         organization_id=user.organization_id,
         created_by=user.id,
         llm_config=config.model_dump(),
+        normalization_method=payload.normalization_method,
+        taxonomy_enabled=payload.taxonomy_enabled,
     )
     db.add(s)
     db.flush()
@@ -326,6 +340,8 @@ def create_session(
         from app.services.bases import attach_base
 
         attach_base(db, s, payload.base_session_id, user)
+        from app.services.flat_schema import configure_reused
+        configure_reused(db, s)
     record(
         db,
         s.id,
@@ -367,7 +383,22 @@ def session_public(db, s):
         "llm_locked": model_registry.selection_locked(db, s),
         "llm_legacy": not bool(s.llm_config),
         "llm_config": model_registry.session_config(db, s).model_dump(),
+        "normalization_locked": normalization_engine.selection_locked(db, s),
     }
+
+
+@router.put('/procurement/sessions/{sid}/normalization-method')
+def select_normalization_method(sid: str, payload: NormalizationSelection, db=Depends(get_db), user=Depends(get_current_user)):
+    require_editor(user)
+    s = own_session(db, sid, user, lock=True)
+    no_active(db, sid)
+    if normalization_engine.selection_locked(db, s):
+        raise HTTPException(409, 'Метод H1 зафиксирован. Для сравнения создайте новую сессию и загрузите исходный Excel; готовая база сохраняет прежние паспорта.')
+    previous = s.normalization_method
+    s.normalization_method = payload.normalization_method
+    record(db, sid, 'NORMALIZATION_METHOD_SELECTED', {'previous': previous, 'method': s.normalization_method}, user.id)
+    db.commit()
+    return session_public(db, s)
 
 
 @router.put("/procurement/sessions/{sid}/llm")
@@ -402,8 +433,13 @@ def select_model(
     return session_public(db, s)
 
 
-def upload(sid, file, kind, db, user, replace_id=None):
+def upload(sid, file, kind, db, user, replace_id=None, requirement_mode="auto"):
     require_editor(user)
+    name = Path(file.filename or "").name
+    if requirement_mode not in {"auto", "lines"}:
+        raise HTTPException(422, "Unknown requirement parsing mode")
+    if requirement_mode == "lines" and (kind != "requirement" or Path(name).suffix.lower() != ".txt"):
+        raise HTTPException(422, "The one-position-per-line mode requires a TXT requirement file")
     s = own_session(db, sid, user, lock=True)
     no_active(db, sid)
     reuse_requirement = (
@@ -424,7 +460,6 @@ def upload(sid, file, kind, db, user, replace_id=None):
             raise HTTPException(
                 409, "Source replacement is only available before processing starts"
             )
-    name = Path(file.filename or "").name
     allowed = {".xlsx"} if kind == "residual" else {".xlsx", ".pdf", ".docx", ".txt"}
     if Path(name).suffix.lower() not in allowed:
         raise HTTPException(415, "Unsupported file type")
@@ -443,7 +478,9 @@ def upload(sid, file, kind, db, user, replace_id=None):
                 ]
             }
         else:
-            meta = {"text": document_text(data, name)}
+            meta = {"text": document_text(data, name), "requirement_mode": requirement_mode}
+            if requirement_mode == "lines":
+                meta["requirement_positions"] = len(requirement_extraction.split_lines(meta["text"]))
         meta["size_bytes"] = len(data)
     except Exception as exc:
         raise HTTPException(422, f"Cannot parse file: {exc}")
@@ -456,6 +493,20 @@ def upload(sid, file, kind, db, user, replace_id=None):
     if old:
         if replaced and old.id != replaced.id:
             raise HTTPException(409, "This file already exists in the session")
+        if kind == "requirement" and (old.meta or {}).get("requirement_mode", "auto") != requirement_mode:
+            if not replaced:
+                raise HTTPException(409, "This file already uses another parsing mode. Replace the document to change its mode.")
+            # An explicit replacement may change only the interpretation of the
+            # same bytes. The existing blob remains valid; no duplicate upload.
+            db.execute(delete(Item).where(Item.document_id == old.id))
+            previous_mode = (old.meta or {}).get("requirement_mode", "auto")
+            old.meta = meta
+            s.status = "UPLOADED"
+            record(db, sid, "DOCUMENT_REPLACED", {
+                "previous_document_id": old.id, "document_id": old.id,
+                "previous_requirement_mode": previous_mode, "requirement_mode": requirement_mode,
+            }, user.id)
+            db.commit()
         return public(old)
     key = f"{user.organization_id}/{sid}/{uuid.uuid4()}{Path(name).suffix.lower()}"
     storage.put(key, data)
@@ -514,6 +565,7 @@ def replace_document(
     sid: str,
     did: str,
     file: UploadFile = File(...),
+    requirement_mode: Literal["auto", "lines"] = Form("auto"),
     db=Depends(get_db),
     user=Depends(get_current_user),
 ):
@@ -521,7 +573,7 @@ def replace_document(
     document = db.get(Document, did)
     if not document or document.session_id != sid:
         raise HTTPException(404, "Document not found")
-    return upload(sid, file, document.kind, db, user, replace_id=did)
+    return upload(sid, file, document.kind, db, user, replace_id=did, requirement_mode=requirement_mode)
 
 
 @router.post("/procurement/sessions/{sid}/upload-residuals", status_code=201)
@@ -538,10 +590,11 @@ def upload_residuals(
 def upload_requirement(
     sid: str,
     file: UploadFile = File(...),
+    requirement_mode: Literal["auto", "lines"] = Form("auto"),
     db=Depends(get_db),
     user=Depends(get_current_user),
 ):
-    return upload(sid, file, "requirement", db, user)
+    return upload(sid, file, "requirement", db, user, requirement_mode=requirement_mode)
 
 
 @router.get("/procurement/sessions/{sid}/documents")
@@ -682,7 +735,8 @@ def rebuild_taxonomy(sid: str, db=Depends(get_db), user=Depends(get_current_user
     require_expert(user)
     s = own_session(db, sid, user, lock=True)
     if (
-        not taxonomy_service.is_new(s.schema_doc)
+        not s.taxonomy_enabled
+        or not taxonomy_service.is_new(s.schema_doc)
         or not s.schema_doc.get("mapping_approved")
         or s.approved
     ):
@@ -813,7 +867,12 @@ def full_pipeline(
         .limit(1)
     ):
         raise HTTPException(409, "Upload a requirement document first")
-    return enqueue(db, s, user, "full", payload.model_dump())
+    # Repeated runs with a ready base and ready requirements are matching only:
+    # no extraction, classification or generative-model availability check.
+    from app.services.workflow import requirements_ready
+
+    kind = "match" if s.approved and requirements_ready(db, s) else "full"
+    return enqueue(db, s, user, kind, payload.model_dump())
 
 
 @router.get("/pipeline/{sid}/normalization-status")
@@ -827,6 +886,7 @@ def status(sid: str, db=Depends(get_db), user=Depends(get_current_user)):
 def retry_job(sid: str, jid: str, db=Depends(get_db), user=Depends(get_current_user)):
     require_editor(user)
     s = own_session(db, sid, user, lock=True)
+    lock_stock_origins(db, s)
     no_active(db, sid)
     job = db.get(Job, jid)
     if not job or job.session_id != sid:
@@ -834,7 +894,8 @@ def retry_job(sid: str, jid: str, db=Depends(get_db), user=Depends(get_current_u
     if job.status != "FAILED":
         raise HTTPException(409, "Only failed jobs may be retried")
     config = model_registry.pin_job_config(db, s, job)
-    if job.kind != "match":
+    h1 = normalization_engine.pin_job(job)
+    if normalization_engine.needs_llm(job.kind, h1['method'], job.params.get('taxonomy_enabled', True)):
         try:
             model_registry.preflight(config)
         except LLMError as exc:
@@ -864,6 +925,7 @@ def normalization_review(
         or_(
             Item.passport["normalization"]["requires_review"].as_boolean() == True,
             Item.passport["classification"]["requires_review"].as_boolean() == True,
+            Item.passport["taxonomy_mapping"]["requires_review"].as_boolean() == True,
         ),
     )
     total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
@@ -1269,6 +1331,7 @@ def system_config(user=Depends(get_current_user)):
         "external_processing": config.provider == "deepseek",
         "api_key_configured": bool(settings.DEEPSEEK_API_KEY.get_secret_value()),
         "default_llm_config": config.model_dump(),
+        "default_normalization_method": "regex",
         "model_selection_supported": True,
         "concurrency": config.concurrency,
         "embedding_model": settings.EMBEDDING_MODEL,
@@ -1279,3 +1342,41 @@ def system_config(user=Depends(get_current_user)):
 @router.get("/system/llm-models")
 def llm_models(user=Depends(get_current_user)):
     return model_registry.catalogue()
+
+
+class TaxonomySelection(Input):
+    taxonomy_enabled: bool
+
+@router.put('/procurement/sessions/{sid}/taxonomy-mode')
+def select_taxonomy_mode(sid: str, payload: TaxonomySelection, db=Depends(get_db), user=Depends(get_current_user)):
+    require_editor(user)
+    s=own_session(db,sid,user,lock=True);no_active(db,sid)
+    if normalization_engine.selection_locked(db,s):
+        raise HTTPException(409,'Режим H2 фиксируется после начала обработки. Создайте новую сессию для другого режима.')
+    s.taxonomy_enabled=payload.taxonomy_enabled
+    if s.base_snapshot.get('reused_passports'):
+        from app.services.flat_schema import configure_reused
+        configure_reused(db,s)
+    record(db,sid,'H2_MODE_SELECTED',payload.model_dump(),user.id);db.commit()
+    return session_public(db,s)
+
+@router.put('/procurement/sessions/{sid}/comparison-rules')
+def comparison_rules(sid: str, payload: SchemaDraft, db=Depends(get_db), user=Depends(get_current_user)):
+    require_expert(user)
+    s=own_session(db,sid,user,lock=True);no_active(db,sid)
+    if s.taxonomy_enabled or s.schema_doc.get('taxonomy_status')!='skipped':
+        raise HTTPException(409,'Правила без дерева доступны после H1 при отключённом H2')
+    data=payload.model_dump(); old={f['key']:f for f in s.schema_doc['features']}
+    if set(old)!={f['key'] for f in data['features']} or len(old)!=len(data['features']):
+        raise HTTPException(422,'Нельзя менять состав извлечённых характеристик')
+    updated=[]
+    for f in data['features']:
+        before=old[f['key']]
+        if any(f.get(k)!=before.get(k) for k in ('label','kind','unit')):
+            raise HTTPException(422,'Изменять можно только операцию сравнения и допуск')
+        updated.append({**before,'comparison':f['comparison'],'tolerance':f['tolerance']})
+    from app.services.run_history import capture_latest
+    capture_latest(db,s)
+    s.schema_doc={**s.schema_doc,'features':updated}
+    record(db,sid,'COMPARISON_RULES_EDITED',{'features':updated},user.id);db.commit()
+    return s.schema_doc

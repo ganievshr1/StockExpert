@@ -47,20 +47,28 @@ export function SessionControls() {
             )
           }
         >
-          {session.approved ? "Запустить подбор" : "Нормализация и категории"}
+          {session.approved
+            ? "Запустить подбор"
+            : session.taxonomy_enabled === false ? "H1 и подбор без H2" : session.normalization_method === "regex"
+              ? "H1 регулярками + H2 моделью"
+              : "Нормализация и категории"}
         </button>
-        <button
-          className="btn"
-          disabled={disabled || !mappingReady || !requirement}
-          onClick={() =>
-            void launch(
-              () => api.normalize(w.sid),
-              "Нормализация поставлена в очередь",
-            )
-          }
-        >
-          Только нормализация
-        </button>
+        {!session.base_snapshot?.reused_passports && (
+          <button
+            className="btn"
+            disabled={disabled || !mappingReady || !requirement}
+            onClick={() =>
+              void launch(
+                () => api.normalize(w.sid),
+                "Нормализация поставлена в очередь",
+              )
+            }
+          >
+            {session.normalization_method === "regex"
+              ? "Только H1: регулярки"
+              : "Только H1: LLM"}
+          </button>
+        )}
         <button
           className="btn"
           disabled={

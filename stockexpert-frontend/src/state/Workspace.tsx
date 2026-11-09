@@ -49,6 +49,8 @@ interface WorkspaceValue {
     title: string,
     baseSessionId?: string,
     llmProfileId?: string,
+    normalizationMethod?: "llm" | "regex",
+    taxonomyEnabled?: boolean,
   ) => Promise<void>;
   clearError: () => void;
   canEdit: boolean;
@@ -250,8 +252,16 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     title: string,
     baseSessionId?: string,
     llmProfileId?: string,
+    normalizationMethod?: "llm" | "regex",
+    taxonomyEnabled?: boolean,
   ) => {
-    const s = await api.create(title, baseSessionId, llmProfileId);
+    const s = await api.create(
+      title,
+      baseSessionId,
+      llmProfileId,
+      normalizationMethod,
+      taxonomyEnabled,
+    );
     await reloadSessions();
     selectSession(s.id);
   };

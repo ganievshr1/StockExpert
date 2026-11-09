@@ -3,6 +3,8 @@ import { Globe, Server, RefreshCw } from "lucide-react";
 import { api } from "../services/api";
 import { useWorkspace } from "../state/Workspace";
 import type { LLMModels } from "../types";
+import { NormalizationPicker } from "./NormalizationPicker";
+import { SessionTaxonomyPanel } from "./TaxonomyModePicker";
 
 const statusLabels: Record<string, string> = {
   installed: "Загружена",
@@ -18,11 +20,13 @@ export function ModelPicker({
   onChange,
   disabled = false,
   currentLabel,
+  label = "Модель для обработки сессии",
 }: {
   value: string;
   onChange: (value: string) => void;
   disabled?: boolean;
   currentLabel?: string;
+  label?: string;
 }) {
   const [catalog, setCatalog] = useState<LLMModels | null>(null),
     [error, setError] = useState(""),
@@ -51,9 +55,9 @@ export function ModelPicker({
   return (
     <div className="space-y-3">
       <label>
-        Модель для обработки сессии
+        {label}
         <select
-          aria-label="Модель для обработки сессии"
+          aria-label={label}
           value={value}
           disabled={disabled || loading || !catalog}
           onChange={(e) => onChange(e.target.value)}
@@ -142,15 +146,42 @@ export function SessionModelPanel() {
   return (
     <section className="panel space-y-4">
       <div>
-        <h2 className="font-semibold mb-2">Модель анализа</h2>
+        <h2 className="font-semibold mb-2">Метод H1 и модель H2</h2>
         <p className="text-xs text-slate-400">
-          Выбор применяется к подготовке схемы, разбору потребности, извлечению
-          характеристик и классификации.
+          {session.base_snapshot?.reused_passports
+            ? "Готовая складская база сохраняет прежние паспорта. Метод H1 применяется только к новой потребности. Для сравнения методов на складе создайте сессию с новым Excel."
+            : "H1 создаёт паспорта выбранным методом. H2 классифицирует эти паспорта выбранной моделью."}
         </p>
       </div>
-      <ModelPicker
+      <NormalizationPicker
+        value={session.normalization_method || "llm"}
+        disabled={
+          !w.canEdit || w.busy || w.active || session.normalization_locked
+        }
+        onChange={(method) => {
+          void w.act(
+            () => api.selectNormalization(w.sid, method),
+            "Метод H1 сохранён",
+          );
+        }}
+      />
+      {session.normalization_locked && (
+        <small>
+          Метод H1 зафиксирован. Для нового расчёта другим методом создайте
+          новую сессию.
+        </small>
+      )}
+      <SessionTaxonomyPanel />
+      {(session.taxonomy_enabled !== false || session.normalization_method === "llm") && <ModelPicker
         value={model.profile_id}
         currentLabel={model.label}
+        label={
+          session.normalization_method === "regex"
+            ? "Модель H2 — классификация паспортов"
+            : session.base_snapshot?.reused_passports
+              ? "Модель для нового опросного листа"
+              : undefined
+        }
         disabled={!w.canEdit || w.busy || w.active || session.llm_locked}
         onChange={(profile) => {
           void w.act(
@@ -158,7 +189,7 @@ export function SessionModelPanel() {
             "Модель сессии сохранена",
           );
         }}
-      />
+      />}
       <p className="text-xs text-slate-500 break-all">
         Выбрано: {model.model}
         {model.quantization ? ` · ${model.quantization}` : ""}.
@@ -166,13 +197,15 @@ export function SessionModelPanel() {
       {session.llm_locked ? (
         <p className="text-xs text-slate-400">
           Модель зафиксирована после начала обработки. Для сравнения создайте
-          новую сессию и выберите другую модель. Можно взять исходные файлы из
-          готовой базы: при смене модели они будут обработаны заново.
+          новую сессию, выберите другую модель и загрузите исходный Excel
+          заново. При выборе готовой базы её паспорта всегда используются
+          повторно.
         </p>
       ) : (
         <p className="text-xs text-slate-400">
-          До первого запуска модель можно изменить. Недоступную модель можно
-          выбрать заранее, но для запуска потребуется её настроить.
+          {session.normalization_method === "regex"
+            ? "Модель H2 можно изменить до начала классификации. Для H1 регулярками доступность модели не требуется."
+            : "До первого запуска модель можно изменить. Недоступную модель можно выбрать заранее, но для запуска потребуется её настроить."}
         </p>
       )}
       {session.llm_legacy && (
@@ -183,7 +216,9 @@ export function SessionModelPanel() {
       )}
       {jobModel && (
         <p className="text-xs text-slate-400">
-          Модель последнего задания: {jobModel.label} ({jobModel.model}).
+          Настройка LLM последнего задания: {jobModel.label} ({jobModel.model}).
+          {w.data?.job.params?.normalization_config?.method === "regex" &&
+            " H1 выполняется регулярками."}
         </p>
       )}
       <p className="text-xs text-slate-500">

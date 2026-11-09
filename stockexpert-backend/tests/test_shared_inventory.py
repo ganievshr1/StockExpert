@@ -4,7 +4,7 @@ from app import tasks
 from test_reusable_bases import base
 
 def create_match(client,auth,sid):
-    target=client.post('/api/v1/procurement/sessions',headers=auth,json={'title':'Shared stock','base_session_id':sid}).json()['id']
+    target=client.post('/api/v1/procurement/sessions',headers=auth,json={'title':'Shared stock','taxonomy_enabled':True,'base_session_id':sid}).json()['id']
     client.post(f'/api/v1/procurement/sessions/{target}/upload-requirement',headers=auth,files={'file':('need.txt','Кабель 3,3кВ'.encode())})
     jid=client.post(f'/api/v1/pipeline/{target}/run',headers=auth,json={}).json()['task_id'];tasks.run_job.run(jid)
     with SessionLocal() as db:
@@ -21,7 +21,7 @@ def test_use_is_shared_and_second_use_rejected(client,auth,base):
     assert client.get(f'/api/v1/matching/{b}/candidates',headers=auth).json()['total']==0
     history=client.get(f'/api/v1/matching/{b}/candidates?shortlisted=false',headers=auth).json()['items'];assert history[0]['residual']['stock_state']=='USED'
     assert client.get('/api/v1/normalized-bases',headers=auth).json()==[]
-    assert client.post('/api/v1/procurement/sessions',headers=auth,json={'title':'empty','base_session_id':source}).status_code==409
+    assert client.post('/api/v1/procurement/sessions',headers=auth,json={'title':'empty','taxonomy_enabled':True,'base_session_id':source}).status_code==409
     metric=client.get(f'/api/v1/metrics/{b}',headers=auth).json()['efficiency'];assert metric['available_stock_rows']==0 and metric['available_shortlisted_pairs']==0
     with SessionLocal() as db:assert db.scalar(select(StockPosition)).used_by_session_id==a
 
@@ -36,7 +36,7 @@ def test_clear_base_affects_all_snapshots_but_preserves_history(client,auth,base
 
 def test_clear_rejected_while_related_session_runs(client,auth,base):
     source,*_=base
-    a=client.post('/api/v1/procurement/sessions',headers=auth,json={'title':'Busy','base_session_id':source}).json()['id']
+    a=client.post('/api/v1/procurement/sessions',headers=auth,json={'title':'Busy','taxonomy_enabled':True,'base_session_id':source}).json()['id']
     with SessionLocal() as db:db.add(Job(session_id=a,kind='match',status='RUNNING'));db.commit()
     assert client.delete(f'/api/v1/normalized-bases/{source}/stock',headers=auth).status_code==409
     with SessionLocal() as db:assert db.scalar(select(StockPosition.state))=='AVAILABLE'

@@ -311,7 +311,7 @@ def test_accepted_partial_batch_is_committed_before_later_outage(
 
     monkeypatch.setattr(llm, "structured", fail_on_repair)
     jid = client.post(
-        f"/api/v1/pipeline/{sid}/start-normalization", headers=auth, json={}
+        f"/api/v1/pipeline/{sid}/run", headers=auth, json={}
     ).json()["task_id"]
     with SessionLocal() as db:
         with pytest.raises(llm.LLMTemporaryError):
@@ -395,7 +395,7 @@ def test_failed_classification_of_new_requirement_uses_frozen_base_safely(
     tid = client.post(
         "/api/v1/procurement/sessions",
         headers=auth,
-        json={"title": "Reuse", "base_session_id": sid},
+        json={"title": "Reuse", "taxonomy_enabled": True, "base_session_id": sid},
     ).json()["id"]
     assert (
         client.post(

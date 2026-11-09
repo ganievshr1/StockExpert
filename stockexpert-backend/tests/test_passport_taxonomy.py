@@ -38,7 +38,7 @@ def mixed(client,auth,monkeypatch):
             return {'match_id':match}
         return {'items':[data['text']]}
     monkeypatch.setattr(llm,'structured',model)
-    sid=client.post(API+'/procurement/sessions',headers=auth,json={'title':'Mixed stock'}).json()['id']
+    sid=client.post(API+'/procurement/sessions',headers=auth,json={'title':'Mixed stock','taxonomy_enabled':True}).json()['id']
     names=[f'Насос погружной P{x} 220В' for x in range(14)]+['Болт М10 10мм','Болты М10 10мм','Помпа A 220В','Датчик D 24В','Датчик D 24В']
     wb=Workbook();wb.active.append(['Описание'])
     for n in names:wb.active.append([n])
@@ -49,6 +49,10 @@ def mixed(client,auth,monkeypatch):
 
 
 def execute(client,auth,sid,path,function):
+    # These integration fixtures exercise H1 + H2 together. Explicit H1-only
+    # behavior is covered separately in test_optional_taxonomy.
+    if function is workflow.normalize_all and path.endswith('/start-normalization'):
+        path=f'pipeline/{sid}/run'
     response=client.post(f'{API}/{path}',headers=auth,json={});assert response.status_code==202,response.text
     with SessionLocal() as db:
         s=db.get(ProcurementSession,sid);j=db.get(Job,response.json()['task_id'])
@@ -144,7 +148,7 @@ def test_retry_reuses_passports_and_completed_classification_batches(client,auth
             if batches==2:raise RuntimeError('simulated LLM failure')
         return model(task,data,schema)
     monkeypatch.setattr(llm,'structured',flaky)
-    jid=client.post(f'{API}/pipeline/{sid}/start-normalization',headers=auth,json={}).json()['task_id']
+    jid=client.post(f'{API}/pipeline/{sid}/run',headers=auth,json={}).json()['task_id']
     with SessionLocal() as db:
         s=db.get(ProcurementSession,sid);j=db.get(Job,jid)
         with pytest.raises(RuntimeError,match='simulated'):workflow.normalize_all(db,s,j,lambda _:None)
@@ -173,7 +177,7 @@ def test_bad_classification_cannot_publish_partial_taxonomy(client,auth,mixed,mo
         if 'passports' in data:result['items']=result['items'][:-1]
         return result
     monkeypatch.setattr(llm,'structured',omit)
-    jid=client.post(f'{API}/pipeline/{sid}/start-normalization',headers=auth,json={}).json()['task_id']
+    jid=client.post(f'{API}/pipeline/{sid}/run',headers=auth,json={}).json()['task_id']
     with SessionLocal() as db:
         workflow.normalize_all(db,db.get(ProcurementSession,sid),db.get(Job,jid),lambda _:None)
         session=db.get(ProcurementSession,sid)
@@ -215,10 +219,22 @@ def test_more_than_40_materials_allowed_and_bad_hierarchy_rejected():
     with pytest.raises(ValueError,match='hierarchy'):SchemaDraft.model_validate(bad)
 
 @pytest.mark.parametrize('new_name,known',[('Помпа X 220В',True),('Реле K 24В',False)])
-def test_new_requirements_use_frozen_taxonomy_without_renormalizing_stock(client,auth,mixed,new_name,known):
+@pytest.mark.parametrize('historic',[False,True])
+def test_new_requirements_use_frozen_taxonomy_without_renormalizing_stock(client,auth,mixed,new_name,known,historic):
     sid,names,calls,_=mixed;schema=ready(client,auth,mixed)
     assert client.post(f'{API}/taxonomy/{sid}/approve',headers=auth,json={'freeze_version':'v1'}).status_code==200
-    result=client.post(API+'/procurement/sessions',headers=auth,json={'title':'Reuse new taxonomy','base_session_id':sid})
+    with SessionLocal() as db:
+        saved={}
+        for item in db.scalars(select(Item).where(Item.session_id==sid,Item.kind=='residual',Item.passport['attributes'].as_string().is_not(None))):
+            if historic:
+                passport=deepcopy(item.passport)
+                passport.pop('taxonomy_version',None)
+                passport.pop('taxonomy_proposal',None)
+                item.passport=passport
+            saved[item.id]=deepcopy(item.passport)
+        db.commit()
+    before_taxonomy=len(calls['taxonomy'])
+    result=client.post(API+'/procurement/sessions',headers=auth,json={'title':'Reuse new taxonomy','taxonomy_enabled':True,'base_session_id':sid,'llm_profile_id':'qwen3-8b'})
     assert result.status_code==201,result.text
     target=result.json();tid=target['id'];before=len(calls['extract'])
     assert target['approved'] and target['schema_doc']['analyzed_items']==len(names)
@@ -227,6 +243,10 @@ def test_new_requirements_use_frozen_taxonomy_without_renormalizing_stock(client
     assert len(calls['extract'])==before+1
     with SessionLocal() as db:
         session=db.get(ProcurementSession,tid)
+        for item in db.scalars(select(Item).where(Item.session_id==tid,Item.kind=='residual',Item.passport['attributes'].as_string().is_not(None))):
+            original_id=item.passport['reuse']['item_id']
+            assert item.passport=={**saved[original_id],'reuse':{'session_id':sid,'item_id':original_id}}
+        assert len(calls['taxonomy'])==before_taxonomy+1  # Only the new requirement.
         assert {c['id'] for c in session.schema_doc['categories']}=={c['id'] for c in schema['categories']}
         assert session.schema_doc['analyzed_items']==len(names)+1
         req=db.scalar(select(Item).where(Item.session_id==tid,Item.kind=='requirement'))

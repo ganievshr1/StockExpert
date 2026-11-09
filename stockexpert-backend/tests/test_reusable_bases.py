@@ -10,7 +10,7 @@ from app import tasks
 
 @pytest.fixture
 def base(client,auth,monkeypatch):
-    sid=client.post('/api/v1/procurement/sessions',headers=auth,json={'title':'Готовый склад'}).json()['id']
+    sid=client.post('/api/v1/procurement/sessions',headers=auth,json={'title':'Готовый склад','taxonomy_enabled':True}).json()['id']
     objects={};monkeypatch.setattr(storage,'put',lambda k,data,*a,**kw:objects.__setitem__(k,data));monkeypatch.setattr(storage,'get',lambda k:objects[k]);monkeypatch.setattr(storage,'delete_key',lambda k:objects.pop(k,None))
     monkeypatch.setattr(storage,'delete_session_files',lambda org,s:[objects.pop(k) for k in list(objects) if k.startswith(f'{org}/{s}/')])
     q=QdrantClient(':memory:');monkeypatch.setattr(search,'client',lambda:q)
@@ -44,10 +44,18 @@ def base(client,auth,monkeypatch):
     monkeypatch.setattr(tasks,'Redis',Redis)
     return sid,objects,model_calls,embeds,source_item
 
-def test_reuse_full_matching_without_stock_llm_or_embeddings(client,auth,base):
+@pytest.mark.parametrize('source_history',['current','different-provenance','legacy'])
+def test_reuse_full_matching_without_stock_llm_or_embeddings(client,auth,base,monkeypatch,source_history):
     sid,objects,calls,embeds,old_item=base
+    with SessionLocal() as db:
+        if source_history=='legacy':db.get(ProcurementSession,sid).llm_config={}
+        if source_history=='different-provenance':
+            item=db.get(Item,old_item)
+            item.passport={**item.passport,'provenance':{'provider':'ollama','model':'historic-model','llm_fingerprint':'historic-fingerprint'}}
+        db.commit()
+        saved_passport=deepcopy(db.get(Item,old_item).passport)
     bases=client.get('/api/v1/normalized-bases',headers=auth).json();assert bases[0]['normalized_rows']==1
-    r=client.post('/api/v1/procurement/sessions',headers=auth,json={'title':'Новый опросный лист','base_session_id':sid});assert r.status_code==201,r.text
+    r=client.post('/api/v1/procurement/sessions',headers=auth,json={'title':'Новый опросный лист','taxonomy_enabled':True,'base_session_id':sid});assert r.status_code==201,r.text
     target=r.json()['id'];assert r.json()['approved'] is True;assert r.json()['base_snapshot']['normalized_rows']==1
     assert client.post(f'/api/v1/pipeline/{target}/run',headers=auth,json={}).status_code==409
     url=f'/api/v1/procurement/sessions/{target}'
@@ -59,6 +67,8 @@ def test_reuse_full_matching_without_stock_llm_or_embeddings(client,auth,base):
         assert job.params['index_stats']=={'vectors_reused':1,'vectors_created':0}
         originals=db.get(Item,old_item);assert 'reuse' not in originals.passport
         new=db.scalar(select(Item).where(Item.session_id==target,Item.kind=='residual',Item.row_index==2));assert new.id!=old_item;assert new.passport['attributes']==originals.passport['attributes']
+        assert new.passport=={**saved_passport,'reuse':{'session_id':sid,'item_id':old_item}}
+        assert originals.passport==saved_passport
     assert len(calls)==2 # split new questionnaire + extract its passport; no stock extraction
     assert embeds.count('Остаток Кабель 3,3кВ')==1 # original indexing only
     report=client.get(f'/api/v1/metrics/{target}',headers=auth).json();e=report['efficiency']
@@ -68,6 +78,17 @@ def test_reuse_full_matching_without_stock_llm_or_embeddings(client,auth,base):
     assert e['vectors_reused']==1
     wb=load_workbook(BytesIO(client.get(f'/api/v1/metrics/{target}/export',headers=auth).content))
     assert any(row[2].value=='reused_passports' and row[3].value==1 for row in wb['Метрики сессии'])
+    # The primary Run action must become pure matching once the new TXT is ready.
+    def no_llm(*args,**kwargs):pytest.fail('Ready passports must not call a generative model or its preflight')
+    monkeypatch.setattr(llm,'structured',no_llm)
+    monkeypatch.setattr('app.services.model_registry.preflight',no_llm)
+    rerun=client.post(f'/api/v1/pipeline/{target}/run',headers=auth,json={})
+    assert rerun.status_code==202,rerun.text
+    tasks.run_job.run(rerun.json()['task_id'])
+    with SessionLocal() as db:
+        job=db.get(Job,rerun.json()['task_id'])
+        assert job.kind=='match' and job.status=='COMPLETED',job.error
+        assert 'normalization_counts' not in job.params
     # Source cleanup must not invalidate already created independent snapshots.
     assert client.delete(f'/api/v1/procurement/sessions/{sid}/files',headers=auth).status_code==200
     assert any(f'/{target}/' in key for key in objects)
@@ -80,7 +101,7 @@ def test_reuse_rejects_active_incomplete_and_foreign(client,auth,base):
     with SessionLocal() as db:
         job=Job(session_id=sid,kind='normalize',status='RUNNING');db.add(job);db.commit();jid=job.id
     assert client.get('/api/v1/normalized-bases',headers=auth).json()==[]
-    payload={'title':'Reuse','base_session_id':sid}
+    payload={'title':'Reuse','taxonomy_enabled':True,'base_session_id':sid}
     assert client.post('/api/v1/procurement/sessions',headers=auth,json=payload).status_code==409
     with SessionLocal() as db:
         db.get(Job,jid).status='COMPLETED'
@@ -92,7 +113,7 @@ def test_reuse_rejects_active_incomplete_and_foreign(client,auth,base):
 
 def test_requirement_delete_before_run_and_cleanup_resets_base(client,auth,base):
     sid,*_=base
-    target=client.post('/api/v1/procurement/sessions',headers=auth,json={'title':'Reuse','base_session_id':sid}).json()['id'];url=f'/api/v1/procurement/sessions/{target}'
+    target=client.post('/api/v1/procurement/sessions',headers=auth,json={'title':'Reuse','taxonomy_enabled':True,'base_session_id':sid}).json()['id'];url=f'/api/v1/procurement/sessions/{target}'
     did=client.post(url+'/upload-requirement',headers=auth,files={'file':('new.txt',b'new need')}).json()['id']
     assert client.delete(url+'/documents/'+did,headers=auth).status_code==200
     result=client.delete(url+'/files',headers=auth);assert result.json()['session']['base_snapshot']=={}
@@ -109,7 +130,7 @@ def test_vector_model_change_forces_reindex(client,auth,base,monkeypatch):
 
 def test_source_deleted_before_first_matching_rebuilds_only_vectors(client,auth,base):
     sid,objects,calls,embeds,_=base
-    target=client.post('/api/v1/procurement/sessions',headers=auth,json={'title':'Independent','base_session_id':sid}).json()['id']
+    target=client.post('/api/v1/procurement/sessions',headers=auth,json={'title':'Independent','taxonomy_enabled':True,'base_session_id':sid}).json()['id']
     assert client.delete(f'/api/v1/procurement/sessions/{sid}/files',headers=auth).status_code==200
     assert client.post(f'/api/v1/procurement/sessions/{target}/upload-requirement',headers=auth,files={'file':('need.txt','Кабель 3,3кВ'.encode())}).status_code==201
     jid=client.post(f'/api/v1/pipeline/{target}/run',headers=auth,json={}).json()['task_id'];tasks.run_job.run(jid)

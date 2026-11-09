@@ -1,3 +1,4 @@
+import { LabDashboard } from "../components/LabDashboard";
 import { ScrollArea } from "../components/ScrollArea";
 import { useWorkspace } from "../state/Workspace";
 import { api } from "../services/api";
@@ -81,44 +82,7 @@ export function MetricsPage() {
           ))}
         </div>
       </section>
-      <div className="metric-grid three">
-        {data.targets.map((target) => {
-          const measured = target.value !== null,
-            passed = measured && target.value! >= target.target;
-          return (
-            <section className="panel stack" key={target.metric}>
-              <h3>
-                {target.metric === "F1"
-                  ? "F1 извлечения"
-                  : target.metric === "Accuracy"
-                    ? "Точность категорий"
-                    : target.label}
-              </h3>
-              <strong className={measured ? "metric-value" : ""}>
-                {percentage(target.value)}
-              </strong>
-              <div className="row between wrap">
-                <small>Цель ≥ {percentage(target.target)}</small>
-                {measured && (
-                  <span className={`badge ${passed ? "success" : "warning"}`}>
-                    {passed ? "В норме" : "Ниже цели"}
-                  </span>
-                )}
-              </div>
-              <div className={`metric-target ${passed ? "" : "warning"}`}>
-                <span style={{ width: `${(target.value || 0) * 100}%` }} />
-              </div>
-              <small>
-                {!measured
-                  ? target.reason
-                  : passed
-                    ? "Цель достигнута"
-                    : `Ниже цели на ${((target.target - target.value!) * 100).toLocaleString("ru-RU", { maximumFractionDigits: 1 })} п.п.`}
-              </small>
-            </section>
-          );
-        })}
-      </div>
+      <LabDashboard />
       <section className="panel row between wrap">
         <p>
           Precision shortlist ·{" "}
@@ -143,6 +107,9 @@ export function MetricsPage() {
           {percentage(data.extraction.fill_rate)} · С цитатой{" "}
           {percentage(data.extraction.evidence_rate)}
         </p>
+        {data.extraction.note && (
+          <p className="muted">{data.extraction.note}</p>
+        )}
         <ScrollArea label="Метрики обработки">
           <table>
             <thead>
@@ -339,13 +306,10 @@ export function MetricsPage() {
         </div>
       </details>
       {!q.finalized && (
-        <Notice
-          title="Метрики качества требуют завершённой экспертной проверки"
-          tone="warning"
-        >
-          Проверяйте параметры, категории и пары, затем нажмите «Завершить
-          экспертную проверку». Для Recall@150 проверьте все пары выбранных
-          потребностей.
+        <Notice title="Ручная проверка ещё не завершена" tone="warning">
+          Для отдельных результатов ручной проверки проверяйте параметры,
+          категории и пары, затем нажмите «Завершить экспертную проверку». Для
+          Recall@150 проверьте все пары выбранных потребностей.
         </Notice>
       )}
     </div>

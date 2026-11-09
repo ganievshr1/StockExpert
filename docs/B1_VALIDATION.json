@@ -1,0 +1,41 @@
+{
+  "release": "3.9.13-b1",
+  "date": "2026-11-07",
+  "backend": {
+    "passed": 375,
+    "errors": 0,
+    "failures": 0,
+    "junit_file": "validation/b1/backend_tests.xml",
+    "environment": "SQLite, local Qdrant and controlled external service doubles; not real Docker stack",
+    "duration_seconds": 48.41
+  },
+  "frontend": {
+    "passed": 64,
+    "test_files_passed": 10,
+    "production_build": "passed: tsc -b and vite build",
+    "junit_file": "validation/b1/frontend_tests.xml"
+  },
+  "launcher": {
+    "passed": 3,
+    "docker": "recording test double"
+  },
+  "simulation": {
+    "tests_passed": 11,
+    "virtual_runs": 260,
+    "calibrated": false,
+    "B1_supported_in_heavy_model": false
+  },
+  "fixture": {
+    "catalog_rows": 12000,
+    "separate_requirement_files": 10,
+    "synthetic": true,
+    "xlsx_csv_equal": true,
+    "sha256_verified": true
+  },
+  "limitations": [
+    "No Docker engine available in execution environment.",
+    "No real PostgreSQL, Redis, MinIO or GPU/Ollama campaign was run.",
+    "No original 12000-row production catalog was supplied.",
+    "Functional tests and discrete-event simulation do not demonstrate production latency or B1 improvement."
+  ]
+}

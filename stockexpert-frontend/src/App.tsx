@@ -18,6 +18,7 @@ import { ReportsPage } from "./pages/ReportsPage";
 import { MetricsPage } from "./pages/MetricsPage";
 import { AuditPage } from "./pages/AuditPage";
 import { NewSessionDialog } from "./features/session/NewSessionDialog";
+import { DeveloperPage } from "./pages/DeveloperPage";
 function WorkspaceApp() {
   const w = useWorkspace();
   const [creating, setCreating] = useState(false);
@@ -28,8 +29,9 @@ function WorkspaceApp() {
   );
   if (w.initializing) return <Loading />;
   if (!w.user) return <LoginPage />;
-  const isDashboard = w.tab === "dashboard";
+  const isDashboard = w.tab === "dashboard" || w.tab === "developer";
   const pages = {
+    developer: <DeveloperPage />,
     dashboard: <DashboardPage onCreate={() => setCreating(true)} />,
     overview: <SessionOverviewPage />,
     data: <DataPage />,

@@ -49,7 +49,12 @@ def needs_normalization_review(passport):
 def needs_review(passport):
     return needs_normalization_review(passport) or bool(
         (passport or {}).get("classification", {}).get("requires_review")
-    )
+    ) or bool((passport or {}).get("taxonomy_mapping", {}).get("requires_review"))
+
+
+def blocks_classification(passport):
+    normalization = (passport or {}).get('normalization', {})
+    return bool(normalization.get('blocks_classification', normalization.get('requires_review', False)))
 
 
 def _grounded_name(name, quote, source):

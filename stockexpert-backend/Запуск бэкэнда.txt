@@ -1,0 +1,10 @@
+cd /home/ganie/StockExpert3.8.0/stockexpert-backend
+
+docker compose -p stockexpert-backend ps -a
+
+docker compose -p stockexpert-backend logs --no-color --tail=80 backend
+
+docker compose \
+  -p stockexpert-frontend \
+  -f /home/ganie/StockExpert3.8.0/stockexpert-frontend/docker-compose.yml \
+  logs --no-color --tail=40 frontend

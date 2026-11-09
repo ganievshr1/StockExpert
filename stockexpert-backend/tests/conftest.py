@@ -1,5 +1,5 @@
 import os,tempfile
-os.environ.update(SECRET_KEY='test-key-which-is-not-used-in-production',MINIO_SECRET_KEY='test-secret',ADMIN_PASSWORD='test-password',DATABASE_URL='sqlite:///'+tempfile.mktemp(suffix='.db'),RERANKER_ENABLED='false')
+os.environ.update(SECRET_KEY='test-key-which-is-not-used-in-production',MINIO_SECRET_KEY='test-secret',ADMIN_PASSWORD='test-password',DATABASE_URL='sqlite:///'+tempfile.mktemp(suffix='.db'),RERANKER_ENABLED='false',LLM_DEFAULT_PROFILE='',DEEPSEEK_MODEL='',DB_HOST='')
 import pytest
 from fastapi.testclient import TestClient
 from app.db import Base,engine,SessionLocal,Organization,User

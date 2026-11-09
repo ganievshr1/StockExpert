@@ -4,7 +4,7 @@ export function Stepper({ current }: { current: number }) {
   const w = useWorkspace();
   const steps: { title: string; tab: NavTab }[] = [
     { title: "Данные", tab: "data" },
-    { title: "Классификатор", tab: "taxonomy" },
+    { title: w.data?.session.taxonomy_enabled === false ? "Параметры без H2" : "Классификатор", tab: "taxonomy" },
     { title: "Подбор", tab: "shortlist" },
     { title: "Решения", tab: "quality" },
     { title: "Отчёт", tab: "reports" },

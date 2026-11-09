@@ -329,7 +329,7 @@ def test_frozen_taxonomy_keeps_failed_new_requirement_without_invented_category(
     tid = client.post(
         "/api/v1/procurement/sessions",
         headers=auth,
-        json={"title": "Reuse", "base_session_id": sid},
+        json={"title": "Reuse", "taxonomy_enabled": True, "base_session_id": sid},
     ).json()["id"]
     client.post(
         f"/api/v1/procurement/sessions/{tid}/upload-requirement",

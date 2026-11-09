@@ -108,6 +108,7 @@ describe("explicit expert assessment", () => {
       await screen.findByText("Отметьте проверенные параметры или категорию"),
     ).toBeTruthy();
     expect(mocks.save).not.toHaveBeenCalled();
+    await userEvent.selectOptions(screen.getByLabelText("Режим проверки паспорта"), "parameters");
     await userEvent.click(screen.getByLabelText("Проверен Напряжение"));
     await userEvent.click(
       screen.getByRole("button", { name: "Сохранить и далее" }),
@@ -126,12 +127,13 @@ describe("explicit expert assessment", () => {
       ),
     );
   });
-  it("stores explicit absence as null and includes verified categories", async () => {
+  it("stores explicit absence without a category in parameter mode", async () => {
     render(<QualityPage />);
+    await userEvent.selectOptions(await screen.findByLabelText("Режим проверки паспорта"), "parameters");
     await userEvent.click(
       await screen.findByRole("button", { name: "Нет данных" }),
     );
-    await userEvent.click(screen.getByLabelText("Категория проверена"));
+    expect(screen.queryByLabelText("Категория проверена")).toBeNull();
     await userEvent.click(
       screen.getByRole("button", { name: "Сохранить и далее" }),
     );
@@ -143,11 +145,30 @@ describe("explicit expert assessment", () => {
         "stock",
         {
           attributes: { voltage: null },
-          category_reviewed: true,
-          category_id: "cable",
+          category_reviewed: false,
+          category_id: null,
         },
       ),
     );
+  });
+  it("defaults to one text per stock row and hides H2 and technical attributes", async () => {
+    render(<QualityPage />);
+    const field=await screen.findByLabelText("Правильное значение Текст наименования");
+    expect(screen.queryByLabelText("Категория проверена")).toBeNull();
+    expect(screen.queryByLabelText("Проверен Напряжение")).toBeNull();
+    expect(mocks.targets.mock.calls.at(-1)?.[4]).toMatchObject({passport_kind:"residual",review_mode:"text"});
+    await userEvent.clear(field);
+    await userEvent.type(field,"Кабель 3300 V");
+    await userEvent.click(screen.getByRole("button",{name:"Сохранить и далее"}));
+    await waitFor(()=>expect(mocks.save).toHaveBeenCalledWith("session","job","passport","stock",{attributes:{name:"Кабель 3300 V"},category_reviewed:false,category_id:null}));
+  });
+  it("checks H2 in its own mode without a text field", async () => {
+    render(<QualityPage />);
+    await userEvent.selectOptions(await screen.findByLabelText("Режим проверки паспорта"), "category");
+    expect(screen.queryByLabelText("Правильное значение Текст наименования")).toBeNull();
+    await userEvent.click(screen.getByLabelText("Категория проверена"));
+    await userEvent.click(screen.getByRole("button",{name:"Сохранить и далее"}));
+    await waitFor(()=>expect(mocks.save).toHaveBeenCalledWith("session","job","passport","stock",{attributes:{},category_reviewed:true,category_id:"cable"}));
   });
   it("skips unknown pairs and saves unsuitable pairs as false", async () => {
     render(<QualityPage />);

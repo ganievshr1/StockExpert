@@ -1,3 +1,4 @@
+import { FlatRules } from "../components/FlatRules";
 import { ScrollArea } from "../components/ScrollArea";
 import { useEffect, useState, type FormEvent } from "react";
 import { useWorkspace } from "../state/Workspace";
@@ -47,6 +48,7 @@ export function TaxonomyPage() {
   );
   if (!w.sid) return <Empty />;
   if (!w.data) return <Loading />;
+  if (w.data.session.taxonomy_enabled === false) return <FlatRules />;
   if (!draft)
     return (
       <Empty
@@ -175,9 +177,16 @@ export function TaxonomyPage() {
           <MappingEditor />
           {current.mapping_approved && (
             <section className="panel stack">
-              <Notice title="Столбцы утверждены">
-                Следующий шаг — нормализация всех позиций и построение
-                классификатора.
+              <Notice
+                title={
+                  w.data.session.status === "H1_READY"
+                    ? "H1 завершён"
+                    : "Столбцы утверждены"
+                }
+              >
+                {w.data.session.normalization_method === "regex"
+                  ? "H1 извлекает паспорта регулярками. После его завершения H2 строит категории выбранной моделью."
+                  : "Следующий шаг — нормализация всех позиций и построение классификатора."}
               </Notice>
               <button
                 className="btn-primary"
@@ -185,14 +194,21 @@ export function TaxonomyPage() {
                 onClick={async () => {
                   if (
                     await w.act(
-                      () => api.normalize(w.sid),
-                      "Нормализация и построение категорий поставлены в очередь",
+                      () =>
+                        w.data?.session.status === "H1_READY"
+                          ? api.rebuildTaxonomy(w.sid)
+                          : api.normalize(w.sid),
+                      "Обработка поставлена в очередь",
                     )
                   )
                     w.setTab("processing");
                 }}
               >
-                Нормализовать все позиции и построить категории
+                {w.data.session.status === "H1_READY"
+                  ? "H2: построить категории"
+                  : w.data.session.normalization_method === "regex"
+                    ? "H1: нормализовать регулярками"
+                    : "Нормализовать все позиции и построить категории"}
               </button>
             </section>
           )}
@@ -551,6 +567,10 @@ export function TaxonomyPage() {
                         "kV",
                         "mm",
                         "mm2",
+                        "A",
+                        "kW",
+                        "Hz",
+                        "rpm",
                         "MPa",
                         "bar",
                         "m",

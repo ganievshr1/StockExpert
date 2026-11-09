@@ -11,6 +11,7 @@ const entries: { id: NavTab; label: string; icon: string }[] = [
   { id: "reports", label: "Отчёт комиссии", icon: "file" },
   { id: "metrics", label: "Метрики", icon: "chart" },
   { id: "audit", label: "Аудит решений", icon: "shield" },
+  { id: "developer", label: "Для разработчика", icon: "chart" },
 ];
 export function Sidebar({ organization }: { organization: string }) {
   const w = useWorkspace();
@@ -47,7 +48,7 @@ export function Sidebar({ organization }: { organization: string }) {
         aria-label="Основная навигация"
       >
         <p className="nav-label">РАБОЧЕЕ ПРОСТРАНСТВО</p>
-        {entries.map((entry, index) => (
+        {entries.filter((entry) => entry.id !== "developer" || w.user?.role === "admin").map((entry, index) => (
           <div key={entry.id} className={index === 6 ? "analytics-nav" : ""}>
             {index === 6 && (
               <>

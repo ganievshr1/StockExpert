@@ -1,6 +1,7 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { Icon } from "./Icon";
 export const statuses: Record<string, string> = {
+  H1_READY: "H1 завершён: паспорта готовы",
   MAPPING_APPROVED: "Столбцы утверждены",
   TAXONOMY_REVIEW: "Проверка таксономии",
   USED: "Запас использован",

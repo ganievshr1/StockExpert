@@ -7,6 +7,7 @@ from app.db import (
     QualityReview, StageTiming, StockPosition,
 )
 from app.services import search, storage
+from app.db import ExpertEvaluation,MetricRevision,RunSnapshot,LabExperiment
 from app.services.execution import ACTIVE_STATUSES
 
 
@@ -33,6 +34,8 @@ def delete_session(db, session_id: str, organization_id: int) -> None:
     session = _locked_session(db, session_id, organization_id)
     if session is None:
         raise SessionDeletionError(404, "Сессия не найдена")
+    if db.scalar(select(LabExperiment.id).where(LabExperiment.session_id==session_id,LabExperiment.status.in_(['QUEUED','RUNNING'])).limit(1)):
+        raise SessionDeletionError(409,'Дождитесь завершения лабораторного эксперимента')
     if db.scalar(select(Job.id).where(
         Job.session_id == session_id, Job.status.in_(ACTIVE_STATUSES)
     ).limit(1)):
@@ -48,6 +51,8 @@ def delete_session(db, session_id: str, organization_id: int) -> None:
     if session is None:  # Another deletion completed while we reacquired the lock.
         return
     # File cleanup may have finished between the two locks and allowed a new job.
+    if db.scalar(select(LabExperiment.id).where(LabExperiment.session_id==session_id,LabExperiment.status.in_(['QUEUED','RUNNING'])).limit(1)):
+        raise SessionDeletionError(409,'Дождитесь завершения лабораторного эксперимента')
     if db.scalar(select(Job.id).where(
         Job.session_id == session_id, Job.status.in_(ACTIVE_STATUSES)
     ).limit(1)):
@@ -63,7 +68,7 @@ def delete_session(db, session_id: str, organization_id: int) -> None:
                 Item.session_id == session_id, Item.stock_id.is_not(None)
             ).distinct()))
             for model in (
-                QualityCompletion, QualityReview, Match, StageTiming,
+                LabExperiment, MetricRevision, RunSnapshot, ExpertEvaluation, QualityCompletion, QualityReview, Match, StageTiming,
                 Job, Item, Document, Audit,
             ):
                 db.execute(delete(model).where(model.session_id == session_id))

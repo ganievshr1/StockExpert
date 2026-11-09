@@ -22,8 +22,9 @@ def test_migration_to_model_selection_preserves_data(tmp_path,existing):
             db.execute("INSERT INTO users (id,username,password_hash,role,organization_id,is_active) VALUES (1,'test','test','admin',1,1)")
             db.execute("INSERT INTO procurement_sessions (id,organization_id,created_by,title,status,progress,schema_doc,approved,created_at,base_snapshot) VALUES ('old-session',1,1,'Keep this title','MATCHED',100,?,1,'2026-09-20','{}')",(json.dumps({'features':[{'key':'voltage_v'}]}),))
     migrate('head')
+    migrate('head')  # Repeated deployment must not recreate tables or lose data.
     with sqlite3.connect(path) as db:
-        assert db.execute('SELECT version_num FROM alembic_version').fetchone()[0]=='0005'
+        assert db.execute('SELECT version_num FROM alembic_version').fetchone()[0]=='0011'
         cols={r[1]:r for r in db.execute('PRAGMA table_info(procurement_sessions)')}
         assert cols['llm_config'][3]==1 and cols['llm_config'][4]=="'{}'"
         if existing:

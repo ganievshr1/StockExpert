@@ -1,0 +1,4 @@
+StockExpert
+Автор и создатель проекта: ganievshr
+Репозиторий: https://github.com/ganievshr1/StockExpert
+Дата подготовки комплекта: 2026-11-09

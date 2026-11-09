@@ -2,9 +2,14 @@ import { request } from "./api";
 import type { Item } from "../types";
 export interface Quality {
   job_id: string | null;
+  taxonomy_enabled?: boolean;
+  recall_stage?: string;
   finalized: boolean;
   finalized_at: string | null;
   f1: number | null;
+  text_f1?: number | null;
+  text_precision?: number | null;
+  text_recall?: number | null;
   accuracy: number | null;
   precision_shortlist: number | null;
   recall_at_150: number | null;
@@ -21,13 +26,16 @@ export interface Quality {
 }
 export interface Answer {
   attributes?: Record<string, string | number | null>;
+  custom_features?: {key:string;label:string;unit:string;aliases:string[]}[];
   category_reviewed?: boolean;
   category_id?: string | null;
+  expected_category?: string | null;
   suitable?: boolean;
   comment?: string;
 }
 export interface QualityTarget {
   target: Item & {
+    raw?: Record<string, unknown>;
     kind?: string;
     sheet?: string;
     row_index?: number;
@@ -41,9 +49,10 @@ export interface Targets {
   job_id: string;
   total: number;
   items: QualityTarget[];
+  schema?: import("../types").SchemaDraft;
 }
 export const qualityApi = {
-  summary: (sid: string) => request<Quality>(`/quality/${sid}`),
+  summary: (sid: string, job?: string) => request<Quality>(`/quality/${sid}${job ? `?job_id=${job}&historical=true` : ""}`),
   targets: (
     sid: string,
     kind: string,
@@ -58,17 +67,17 @@ export const qualityApi = {
     request(`/quality/${sid}/${kind}/${id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ job_id: job, ...answer }),
+      body: JSON.stringify({ job_id: job, historical: true, ...answer }),
     }),
   remove: (sid: string, job: string, kind: string, id: string) =>
-    request(`/quality/${sid}/${kind}/${id}?job_id=${job}`, {
+    request(`/quality/${sid}/${kind}/${id}?job_id=${job}&historical=true`, {
       method: "DELETE",
     }),
   finalize: (sid: string, job: string) =>
     request<Quality>(`/quality/${sid}/finalize`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ job_id: job }),
+      body: JSON.stringify({ job_id: job, historical: true }),
     }),
 };
 export const percent = (n: number | null | undefined) =>

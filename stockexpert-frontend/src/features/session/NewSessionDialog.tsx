@@ -3,9 +3,15 @@ import { useWorkspace } from "../../state/Workspace";
 import { api } from "../../services/api";
 import type { NormalizedBase } from "../../types";
 import { ModelPicker } from "../../components/ModelPicker";
+import { NormalizationPicker } from "../../components/NormalizationPicker";
+import { TaxonomyModePicker } from "../../components/TaxonomyModePicker";
 import { ErrorBox, Modal, Notice } from "../../components/ui";
 export function NewSessionDialog({ onClose }: { onClose: () => void }) {
   const w = useWorkspace();
+  const [method, setMethod] = useState<"llm" | "regex">(
+    w.config?.default_normalization_method || "regex",
+  );
+  const [taxonomyEnabled, setTaxonomyEnabled] = useState(false);
   const [profile, setProfile] = useState(
     w.config?.default_llm_config?.profile_id || "deepseek",
   );
@@ -43,7 +49,13 @@ export function NewSessionDialog({ onClose }: { onClose: () => void }) {
     setPending(true);
     setError("");
     try {
-      await w.create(title, mode === "reuse" ? selected : undefined, profile);
+      await w.create(
+        title,
+        mode === "reuse" ? selected : undefined,
+        profile,
+        method,
+        taxonomyEnabled,
+      );
       w.setTab("data");
       onClose();
     } catch (reason) {
@@ -73,7 +85,24 @@ export function NewSessionDialog({ onClose }: { onClose: () => void }) {
             autoFocus
           />
         </label>
-        <ModelPicker value={profile} onChange={setProfile} disabled={pending} />
+        <NormalizationPicker
+          value={method}
+          onChange={setMethod}
+          disabled={pending}
+        />
+        <TaxonomyModePicker value={taxonomyEnabled} onChange={setTaxonomyEnabled} disabled={pending}/>
+        {(taxonomyEnabled || method === "llm") && <ModelPicker
+          value={profile}
+          onChange={setProfile}
+          disabled={pending}
+          label={
+            method === "regex"
+              ? "Модель H2 — классификация паспортов"
+              : mode === "reuse"
+                ? "Модель для нового опросного листа"
+                : undefined
+          }
+        />}
         <div className="stack">
           <label>Складская база</label>
           <div className="tabs">
@@ -123,15 +152,18 @@ export function NewSessionDialog({ onClose }: { onClose: () => void }) {
               </button>
             )}
             <small>
-              При совпадении модели паспорта используются повторно. Если выбрана
-              другая модель, исходные строки будут обработаны заново.
+              Нормализованные значения берутся из готовой базы без
+              повторной обработки, даже при выборе другой модели или метода H1.
+              {taxonomyEnabled ? " Категории используются в режиме H2." : " Категории в режиме без H2 не используются."}{" "}
+              Новый метод применяется к опросному листу. Для сравнения H1 на
+              складе выберите «Загрузить новый Excel».
             </small>
           </>
         )}
         <Notice title="Два источника для проверки">
           {mode === "new"
             ? "На следующем шаге загрузите базу остатков Excel (.xlsx) и опросный лист (.txt)."
-            : "На следующем шаге загрузите новый опросный лист (.txt). База будет взята из выбранной сессии."}
+            : "Загрузите только новый опросный лист (.txt) и запустите сопоставление с готовой базой."}
         </Notice>
         {error && <ErrorBox message={error} />}
         <div className="modal-actions">
