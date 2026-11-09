@@ -3,7 +3,7 @@
 
 The CSV/TXT/JSON generation and validation use Python's standard library.
 The auto XLSX engine uses artifact-tool inside Codex and openpyxl in normal
-Python/WSL environments. Prebuilt XLSX is included for normal application use.
+Python/WSL environments. Generate XLSX locally before application use; this source distribution omits catalog data.
 """
 from __future__ import annotations
 

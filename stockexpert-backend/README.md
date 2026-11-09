@@ -32,7 +32,7 @@
 
 ---
 
-# StockExpert 3.9.0 — выпуск Ганиева Шамиля
+# StockExpert 3.9.0 — выпуск ganievshr
 
 Исправление повторного использования базы и меню: [PATCH_REUSE_BASE.md](PATCH_REUSE_BASE.md).
 

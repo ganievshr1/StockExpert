@@ -1,3 +1,5 @@
+> Комплект исходного кода от 09.11.2026, автор `ganievshr`. Дампы БД, синтетический каталог на 12 000 строк и старые выгрузки результатов исключены. Инструкция по Git: `docs/GIT_UPDATE_RU.txt`.
+
 # StockExpert B1 — 3.9.13-b1.2
 
 Launcher revision 2 исправляет выбор контейнеров текущего стенда:
@@ -18,7 +20,6 @@ Launcher revision 2 исправляет выбор контейнеров те�
 - [Архитектура и пути файлов](docs/B1_ARCHITECTURE.md)
 - [Редактируемая схема SVG](docs/B1_ARCHITECTURE.svg)
 - [Допущения и результаты имитационной модели](docs/B1_SIMULATION.md)
-- [Отчёт Word с инструкцией и результатами](docs/StockExpert_B1_implementation_and_results.docx)
 - [Протокол проверок исходного релиза](docs/B1_VALIDATION.json)
 - [Протокол проверок загрузки десяти потребностей](docs/B1_POSITIONS_VALIDATION.json)
 
