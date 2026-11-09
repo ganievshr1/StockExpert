@@ -1,0 +1,47 @@
+STOCKEXPERT — РАБОТА С GIT
+
+Репозиторий: https://github.com/ganievshr1/StockExpert
+Автор: ganievshr <shomastyk2211@yandex.ru>
+
+Локальная рабочая папка:
+/home/ganie/StockExpert_release/repository
+
+1. НАСТРОЙКА АВТОРА
+
+cd /home/ganie/StockExpert_release/repository
+git config user.name ganievshr
+git config user.email shomastyk2211@yandex.ru
+
+Адрес email должен быть подтверждён в аккаунте GitHub для привязки коммитов
+к профилю. Авторизация на GitHub настраивается отдельно через gh или SSH.
+
+2. ПРОВЕРКА ИЗМЕНЕНИЙ
+
+git status
+git diff
+git log --graph --oneline -12
+
+Перед коммитом добавьте только нужные изменённые файлы командой git add.
+Рабочую БД, резервные копии, Docker volumes, секреты и генерируемые
+результаты экспериментов включать в коммит не нужно.
+
+3. НОВЫЙ КОММИТ
+
+git diff --cached
+git commit -m "Описание изменений"
+
+4. ПУБЛИКАЦИЯ НОВЫХ КОММИТОВ В MAIN
+
+git fetch origin
+git merge-base --is-ancestor origin/main HEAD && git push origin HEAD:refs/heads/main
+
+Эти команды предназначены для обычных новых коммитов. Если main изменился
+на сервере, сначала изучите новые изменения и объедините их с локальными.
+При отказе защиты ветки используйте предусмотренный в репозитории порядок
+проверки и слияния изменений.
+
+5. ЗАПУСК ПРОЕКТА
+
+Основные инструкции: README_B1.md, docs/B1_QUICKSTART_RU.md и
+docs/B1_PARALLEL_GPU_RU.md. Перед запуском проверьте настройки .env
+и доступность Docker. Миграции и схема БД входят в исходный код.
